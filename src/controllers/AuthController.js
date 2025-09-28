@@ -1,9 +1,6 @@
-//Permite la conexion a la base de datos
 const { PrismaClient } = require('../generated/prisma');
 const prisma = new PrismaClient();
-//permite encriptar las contraseñas
 const bcrypt = require('bcrypt');
-//permite crear y verificar tokens al momento de iniciar sesion
 const jwt = require('jsonwebtoken');
 //Para envio de correos electronicos
 const nodemailer = require('nodemailer');
@@ -13,14 +10,21 @@ const { generateAccessToken, generateRefreshToken } = require("../config/jwtConf
 
 const signUp = async (req, res) => {
     try {
-        let { email, current_password, fullname } = req.body;
+        let { 
+            email, 
+            current_password, 
+            fullname, 
+            role, 
+            departamento, 
+            especializacion, 
+            phone, 
+            date_of_birth 
+        } = req.body;
 
-        // Validar datos obligatorios
         if (!email || !current_password || !fullname) {
             return res.status(400).json({ message: "Faltan datos obligatorios" });
         }
 
-        // Normalizar email
         email = email.toLowerCase().trim();
 
         // Validar formato de email
@@ -29,20 +33,18 @@ const signUp = async (req, res) => {
             return res.status(400).json({ message: "El email no es válido" });
         }
 
-        // Validar contraseña mínima
+        // Validar contraseña mínima y complejidad
         if (current_password.length < 6) {
             return res.status(400).json({ message: "La contraseña debe tener al menos 6 caracteres" });
         }
-
-        // Validar contraseña con al menos 1 letra y 1 número
         const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]+$/;
         if (!passwordRegex.test(current_password)) {
             return res.status(400).json({ message: "La contraseña debe tener al menos una letra y un número" });
         }
 
         // Validar que el email no exista
-        const UserExist = await prisma.users.findUnique({ where: { email } });
-        if (UserExist) {
+        const userExist = await prisma.users.findUnique({ where: { email } });
+        if (userExist) {
             return res.status(400).json({ message: "El correo ya está registrado" });
         }
 
@@ -53,11 +55,49 @@ const signUp = async (req, res) => {
 
         const userCount = await prisma.users.count();
 
-        let role = "PATIENT"; // por defecto
+        // Manejo de roles
         if (userCount === 0) {
-            role = "administrador";
+            role = "ADMINISTRADOR";
+        } else {
+            const allowedRoles = ["ADMINISTRADOR", "MEDICO", "ENFERMERO", "PACIENTE"];
+            if (!role || !allowedRoles.includes(role.toUpperCase())) {
+                role = "PACIENTE";
+            } else {
+                role = role.toUpperCase();
+            }
         }
-        // Crear usuario en estado PENDING
+
+        // Manejo de departamento
+        let departamentoId = null;
+        if (departamento) {
+            let dept = await prisma.departamento.findUnique({ where: { nombre: departamento } });
+            if (!dept) {
+                dept = await prisma.departamento.create({ data: { nombre: departamento } });
+            }
+            departamentoId = dept.id;
+        }
+
+        // Manejo de especializacion solo para MEDICO o ENFERMERO
+        let especializacionId = null;
+        if (especializacion) {
+            if (!["MEDICO", "ENFERMERO"].includes(role)) {
+                return res.status(400).json({ message: "Solo los médicos o enfermeras pueden tener especialización" });
+            }
+            if (!departamentoId) {
+                return res.status(400).json({ message: "Debe especificar un departamento para la especialización" });
+            }
+            let esp = await prisma.especializacion.findFirst({
+                where: { nombre: especializacion, departamentoId }
+            });
+            if (!esp) {
+                esp = await prisma.especializacion.create({
+                    data: { nombre: especializacion, departamentoId }
+                });
+            }
+            especializacionId = esp.id;
+        }
+
+        // Crear usuario
         const createdUser = await prisma.users.create({
             data: {
                 email,
@@ -66,13 +106,16 @@ const signUp = async (req, res) => {
                 role,
                 status: "PENDING",
                 verificationCode,
-                verificationCodeExpires: verificationExpires
+                verificationCodeExpires: verificationExpires,
+                departamentoId,
+                especializacionId,
+                phone: phone || null,
+                date_of_birth: date_of_birth ? new Date(date_of_birth) : null
             }
         });
 
         // Enviar correo de verificación
         const emailResult = await sendVerificationEmail(email, fullname, verificationCode);
-
         if (!emailResult.success) {
             return res.status(500).json({ message: "Error enviando correo de verificación" });
         }
@@ -83,7 +126,12 @@ const signUp = async (req, res) => {
                 id: createdUser.id,
                 email: createdUser.email,
                 fullname: createdUser.fullname,
-                status: createdUser.status
+                status: createdUser.status,
+                role: createdUser.role,
+                departamentoId,
+                especializacionId,
+                phone: createdUser.phone,
+                date_of_birth: createdUser.date_of_birth
             }
         });
 
@@ -219,12 +267,10 @@ const signIn = async (req, res) => {
   try {
     const { email, current_password } = req.body;
 
-    // Validar campos
     if (!email || !current_password) {
       return res.status(400).json({ message: "Email y contraseña son requeridos" });
     }
 
-    // Buscar usuario
     const user = await prisma.users.findUnique({
       where: { email: email.toLowerCase().trim() },
     });
@@ -233,38 +279,60 @@ const signIn = async (req, res) => {
       return res.status(404).json({ message: "Usuario no encontrado" });
     }
 
-    // Validar que esté activo
-    if (user.status !== "ACTIVE") {
-      return res.status(403).json({ message: "Cuenta no verificada" });
-    }
-
-    // Comparar contraseña
     const isMatch = await bcrypt.compare(current_password, user.current_password);
     if (!isMatch) {
       return res.status(401).json({ message: "Credenciales inválidas" });
     }
 
-    // Generar tokens
-    const accessToken = generateAccessToken(user);
-    const refreshToken = generateRefreshToken(user);
+    if (user.status === "PENDING") {
+      const verificationCode = generateVerificationCode();
+      const verificationExpires = new Date();
+      verificationExpires.setMinutes(verificationExpires.getMinutes() + 10);
 
-    // Guardar refresh token en DB (opcional)
-    await prisma.users.update({
-      where: { id: user.id },
-      data: { refreshToken },
-    });
+      await prisma.users.update({
+        where: { id: user.id },
+        data: {
+          verificationCode,
+          verificationCodeExpires: verificationExpires,
+        },
+      });
 
-    res.status(200).json({
-      message: "Login exitoso",
-      accessToken,
-      refreshToken,
-    });
+      const emailResult = await sendVerificationEmail(
+        user.email,
+        user.fullname,
+        verificationCode
+      );
+
+      if (!emailResult.success) {
+        return res.status(500).json({ message: "Error enviando email de verificación" });
+      }
+
+      return res.status(200).json({
+        message: "Código de verificación enviado al email. Debes verificar para iniciar sesión.",
+        step: "VERIFY_LOGIN"
+      });
+    }
+
+    if (user.status === "ACTIVE") {
+      const accessToken = generateAccessToken(user);
+      const refreshToken = generateRefreshToken(user);
+
+      await prisma.users.update({
+        where: { id: user.id },
+        data: { refreshToken },
+      });
+
+      return res.status(200).json({
+        message: "Login exitoso",
+        accessToken,
+        refreshToken,
+      });
+    }
 
   } catch (error) {
     console.error("Error en login:", error);
     res.status(500).json({ message: "Error interno del servidor" });
   }
 };
-
 
 module.exports = {signUp, signIn, verifyEmail, resendVerificationCode};
