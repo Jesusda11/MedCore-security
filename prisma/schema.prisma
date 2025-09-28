@@ -15,10 +15,29 @@ datasource db {
 }
 
 enum Role {
-  "Enfermera",
-  "medico",
-  "administrador",
-  "paciente"
+  ADMINISTRADOR
+  MEDICO
+  ENFERMERA
+  PACIENTE
+}
+
+model Departamento {
+  id                String            @id @default(auto()) @map("_id") @db.ObjectId
+  nombre            String            @unique
+  especializaciones Especializacion[]
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  Users             Users[]
+}
+
+model Especializacion {
+  id             String       @id @default(auto()) @map("_id") @db.ObjectId
+  nombre         String
+  departamento   Departamento @relation(fields: [departamentoId], references: [id])
+  departamentoId String
+  usuarios       Users[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 }
 
 model Users {
@@ -29,8 +48,18 @@ model Users {
   status                  String    @default("PENDING")
   verificationCode        String?
   verificationCodeExpires DateTime?
-  role                    String    @default("PATIENT") // PATIENT, DOCTOR, NURSE, ADMIN
+  role                    Role      @default(PACIENTE)
   refreshToken            String?
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
+
+  // Relaciones
+  especializacion   Especializacion? @relation(fields: [especializacionId], references: [id])
+  especializacionId String?
+  departamento      Departamento?    @relation(fields: [departamentoId], references: [id])
+  departamentoId    String?
+
+  license_number String?
+  phone          String?
+  date_of_birth  DateTime?
 }

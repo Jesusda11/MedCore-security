@@ -1,28 +1,19 @@
 const jwt = require("jsonwebtoken");
 
-const authMiddleware = (roles = []) => {
-  return (req, res, next) => {
-    const authHeader = req.headers["authorization"];
-    const token = authHeader && authHeader.split(" ")[1];
+module.exports = function authMiddleware(req, res, next) {
+  const authHeader = req.headers.authorization;
 
-    if (!token) {
-      return res.status(401).json({ message: "Token no proporcionado" });
-    }
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({ message: "Token no proporcionado" });
+  }
 
-    try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      req.user = decoded;
+  const token = authHeader.split(" ")[1];
 
-      // Si se pasan roles específicos, validarlos
-      if (roles.length && !roles.includes(decoded.role)) {
-        return res.status(403).json({ message: "No tienes permiso" });
-      }
-
-      next();
-    } catch (error) {
-      return res.status(403).json({ message: "Token inválido o expirado" });
-    }
-  };
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = decoded; // Guardamos la info del usuario en req.user
+    next();
+  } catch (err) {
+    return res.status(401).json({ message: "Token inválido o expirado" });
+  }
 };
-
-module.exports = authMiddleware;

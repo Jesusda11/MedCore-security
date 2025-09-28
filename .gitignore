@@ -204,6 +204,8 @@ $RECYCLE.BIN/
 
 # End of https://www.toptal.com/developers/gitignore/api/windows,node,visualstudiocode,linux
 
+/uploads
+
 /src/generated/prisma
 
 /src/generated/prisma
