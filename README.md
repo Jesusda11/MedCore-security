@@ -12,7 +12,7 @@ Comprehensive hospital management system that includes patient management, elect
 appointment scheduling, medical inventory management, billing, basic telemedicine,
 and medical analytics.
 
-## 🎨 Tools Backend:
+## 🎨 Tools :
 - [![Prisma][Prisma-logo]][Prisma-url] Prisma is an open-source database toolkit that simplifies database access and management.
 - [![Prisma Client][PrismaClient-logo]][PrismaClient-url] Prisma Client is an auto-generated and type-safe query builder for Node.js and TypeScript.
 - [![bcrypt][bcrypt-logo]][bcrypt-url] Bcrypt is a library for hashing passwords.
