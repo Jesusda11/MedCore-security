@@ -178,26 +178,28 @@ const verifyEmail = async (req, res) => {
             });
         }
 
-        // Activar la cuenta
+        // Generar tokens
+        const accessToken = generateAccessToken(user);
+        const refreshToken = generateRefreshToken(user);
+
+        // Activar la cuenta y guardar el refresh token
         const updatedUser = await prisma.users.update({
             where: { id: user.id },
             data: {
                 status: "ACTIVE",
                 verificationCode: null,
                 verificationCodeExpires: null,
+                refreshToken,
             },
         });
 
         return res.status(200).json({
             message: "Email verificado exitosamente. Tu cuenta está ahora activa.",
-            user: {
-                id: updatedUser.id,
-                email: updatedUser.email,
-                fullname: updatedUser.fullname,
-                status: updatedUser.status,
-            },
+            accessToken,
+            refreshToken,
         });
     } catch (error) {
+        console.error("Error en verifyEmail:", error);
         return res.status(500).json({
             message: "Error interno del servidor",
         });
