@@ -9,136 +9,122 @@ const { generateAccessToken, generateRefreshToken } = require("../config/jwtConf
 
 
 const signUp = async (req, res) => {
-    try {
-        let { 
-            email, 
-            current_password, 
-            fullname, 
-            role, 
-            departamento, 
-            especializacion, 
-            phone, 
-            date_of_birth 
-        } = req.body;
+  try {
+    let { 
+      email, 
+      current_password, 
+      fullname, 
+      role, 
+      departamento, 
+      especializacion, 
+      phone, 
+      date_of_birth 
+    } = req.body;
 
-        if (!email || !current_password || !fullname) {
-            return res.status(400).json({ message: "Faltan datos obligatorios" });
-        }
-
-        email = email.toLowerCase().trim();
-
-        // Validar formato de email
-        const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-        if (!emailRegex.test(email)) {
-            return res.status(400).json({ message: "El email no es válido" });
-        }
-
-        // Validar contraseña mínima y complejidad
-        if (current_password.length < 6) {
-            return res.status(400).json({ message: "La contraseña debe tener al menos 6 caracteres" });
-        }
-        const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]+$/;
-        if (!passwordRegex.test(current_password)) {
-            return res.status(400).json({ message: "La contraseña debe tener al menos una letra y un número" });
-        }
-
-        // Validar que el email no exista
-        const userExist = await prisma.users.findUnique({ where: { email } });
-        if (userExist) {
-            return res.status(400).json({ message: "El correo ya está registrado" });
-        }
-
-        // Generar código de verificación y expiración
-        const verificationCode = generateVerificationCode();
-        const verificationExpires = new Date();
-        verificationExpires.setMinutes(verificationExpires.getMinutes() + 15);
-
-        const userCount = await prisma.users.count();
-
-        // Manejo de roles
-        if (userCount === 0) {
-            role = "ADMINISTRADOR";
-        } else {
-            const allowedRoles = ["ADMINISTRADOR", "MEDICO", "ENFERMERO", "PACIENTE"];
-            if (!role || !allowedRoles.includes(role.toUpperCase())) {
-                role = "PACIENTE";
-            } else {
-                role = role.toUpperCase();
-            }
-        }
-
-        // Manejo de departamento
-        let departamentoId = null;
-        if (departamento) {
-            let dept = await prisma.departamento.findUnique({ where: { nombre: departamento } });
-            if (!dept) {
-                dept = await prisma.departamento.create({ data: { nombre: departamento } });
-            }
-            departamentoId = dept.id;
-        }
-
-        // Manejo de especializacion solo para MEDICO o ENFERMERO
-        let especializacionId = null;
-        if (especializacion) {
-            if (!["MEDICO", "ENFERMERO"].includes(role)) {
-                return res.status(400).json({ message: "Solo los médicos o enfermeras pueden tener especialización" });
-            }
-            if (!departamentoId) {
-                return res.status(400).json({ message: "Debe especificar un departamento para la especialización" });
-            }
-            let esp = await prisma.especializacion.findFirst({
-                where: { nombre: especializacion, departamentoId }
-            });
-            if (!esp) {
-                esp = await prisma.especializacion.create({
-                    data: { nombre: especializacion, departamentoId }
-                });
-            }
-            especializacionId = esp.id;
-        }
-
-        // Crear usuario
-        const createdUser = await prisma.users.create({
-            data: {
-                email,
-                current_password: await bcrypt.hash(current_password, 10),
-                fullname,
-                role,
-                status: "PENDING",
-                verificationCode,
-                verificationCodeExpires: verificationExpires,
-                departamentoId,
-                especializacionId,
-                phone: phone || null,
-                date_of_birth: date_of_birth ? new Date(date_of_birth) : null
-            }
-        });
-
-        // Enviar correo de verificación
-        const emailResult = await sendVerificationEmail(email, fullname, verificationCode);
-        if (!emailResult.success) {
-            return res.status(500).json({ message: "Error enviando correo de verificación" });
-        }
-
-        return res.status(201).json({
-            message: "Usuario creado correctamente. Verifica tu correo.",
-            user: {
-                id: createdUser.id,
-                email: createdUser.email,
-                fullname: createdUser.fullname,
-                status: createdUser.status,
-                role: createdUser.role,
-                departamentoId,
-                especializacionId,
-                phone: createdUser.phone,
-                date_of_birth: createdUser.date_of_birth
-            }
-        });
-
-    } catch (error) {
-        console.error("Error en signUp:", error);
-        return res.status(500).json({ message: "Error interno del servidor" });
+    if (!email || !current_password || !fullname) {
+      return res.status(400).json({ message: "Faltan datos obligatorios" });
     }
+
+    email = email.toLowerCase().trim();
+
+    // Validar formato de email
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ message: "El email no es válido" });
+    }
+
+    // Validar contraseña mínima y complejidad
+    if (current_password.length < 6) {
+      return res.status(400).json({ message: "La contraseña debe tener al menos 6 caracteres" });
+    }
+    const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]+$/;
+    if (!passwordRegex.test(current_password)) {
+      return res.status(400).json({ message: "La contraseña debe tener al menos una letra y un número" });
+    }
+
+    // Validar que el email no exista
+    const userExist = await prisma.users.findUnique({ where: { email } });
+    if (userExist) {
+      return res.status(400).json({ message: "El correo ya está registrado" });
+    }
+
+    const userCount = await prisma.users.count();
+
+    // Manejo de roles
+    if (userCount === 0) {
+      role = "ADMINISTRADOR";
+    } else {
+      const allowedRoles = ["ADMINISTRADOR", "MEDICO", "ENFERMERA", "PACIENTE"];
+      if (!role || !allowedRoles.includes(role.toUpperCase())) {
+        role = "PACIENTE";
+      } else {
+        role = role.toUpperCase();
+      }
+    }
+
+    // Manejo de departamento
+    let departamentoId = null;
+    if (departamento) {
+      let dept = await prisma.departamento.findUnique({ where: { nombre: departamento } });
+      if (!dept) {
+        dept = await prisma.departamento.create({ data: { nombre: departamento } });
+      }
+      departamentoId = dept.id;
+    }
+
+    // Manejo de especializacion solo para MEDICO o ENFERMERA
+    let especializacionId = null;
+    if (especializacion) {
+      if (!["MEDICO", "ENFERMERA"].includes(role)) {
+        return res.status(400).json({ message: "Solo los médicos o enfermeras pueden tener especialización" });
+      }
+      if (!departamentoId) {
+        return res.status(400).json({ message: "Debe especificar un departamento para la especialización" });
+      }
+      let esp = await prisma.especializacion.findFirst({
+        where: { nombre: especializacion, departamentoId }
+      });
+      if (!esp) {
+        esp = await prisma.especializacion.create({
+          data: { nombre: especializacion, departamentoId }
+        });
+      }
+      especializacionId = esp.id;
+    }
+
+    const createdUser = await prisma.users.create({
+      data: {
+        email,
+        current_password: await bcrypt.hash(current_password, 10),
+        fullname,
+        role,
+        status: "PENDING", 
+        departamentoId,
+        especializacionId,
+        phone: phone || null,
+        date_of_birth: date_of_birth ? new Date(date_of_birth) : null
+      }
+    });
+
+    return res.status(201).json({
+      message: "Usuario creado correctamente. Debe iniciar sesión para verificar su cuenta.",
+      user: {
+        id: createdUser.id,
+        email: createdUser.email,
+        fullname: createdUser.fullname,
+        status: createdUser.status,
+        role: createdUser.role,
+        departamentoId,
+        especializacionId,
+        phone: createdUser.phone,
+        date_of_birth: createdUser.date_of_birth
+      }
+    });
+
+  } catch (error) {
+    console.error("Error en signUp:", error);
+    return res.status(500).json({ message: "Error interno del servidor" });
+  }
 };
 
 const verifyEmail = async (req, res) => {
