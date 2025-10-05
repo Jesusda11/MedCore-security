@@ -7,9 +7,8 @@ const bcrypt = require("bcrypt");
 const { PrismaClient } = require("../generated/prisma");
 const prisma = new PrismaClient();
 
-/**
- * Detecta delimitador más probable en una línea (header)
- */
+/* ---------- Helpers ---------- */
+
 function detectDelimiter(line) {
   if (!line) return ",";
   const comma = (line.match(/,/g) || []).length;
@@ -20,10 +19,6 @@ function detectDelimiter(line) {
   return ",";
 }
 
-/**
- * Normaliza claves del CSV: espacios -> _, guiones -> _, minúsculas.
- * También deja valores vacíos como null y trim.
- */
 function normalizeRowKeysAndValues(row) {
   const out = {};
   for (const rawKey of Object.keys(row)) {
@@ -43,17 +38,36 @@ function normalizeRowKeysAndValues(row) {
   return out;
 }
 
-/**
- * Función principal: importa usuarios desde el CSV path
- * Devuelve { total, errors }
- */
+function isValidEmail(email) {
+  if (!email) return false;
+  const regex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[A-Za-z]{2,}$/;
+  return regex.test(email);
+}
+
+function isValidPassword(pw) {
+  if (!pw || pw.length < 6) return false;
+  const regex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]+$/;
+  return regex.test(pw);
+}
+
+function isValidDateIso(isoStr) {
+  if (!isoStr) return false;
+  const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+  if (!dateRegex.test(isoStr)) return false;
+  const parsed = new Date(isoStr);
+  return !isNaN(parsed.getTime());
+}
+
+/* ---------- Main import function ---------- */
+
 async function importUsersFromCSV(filePath) {
   try {
+    // 1) Leer y limpiar archivo
     let raw = fs.readFileSync(filePath, "utf8");
     raw = raw.replace(/^\uFEFF/, "");
     const lines = raw.split(/\r?\n/).filter((l) => l.trim().length > 0);
     if (lines.length === 0) {
-      return { total: 0, errors: ["Archivo vacío"] };
+      return { inserted: 0, skipped: 0, errors: ["Archivo vacío"] };
     }
 
     const cleanedLines = lines.map((l) => {
@@ -65,12 +79,11 @@ async function importUsersFromCSV(filePath) {
     });
 
     const cleanedCsv = cleanedLines.join("\n");
-
     const headerLine = cleanedLines[0] || "";
     const delimiter = detectDelimiter(headerLine);
-
     const stream = Readable.from([cleanedCsv]);
 
+    // 2) Parsear CSV a filas
     const rows = [];
     await new Promise((resolve, reject) => {
       stream
@@ -83,6 +96,7 @@ async function importUsersFromCSV(filePath) {
           })
         )
         .on("data", (row) => {
+          // Soporte para casos donde csv-parser no separó correctamente.
           const keys = Object.keys(row);
           if (keys.length === 1 && keys[0].includes(delimiter) && row[keys[0]] && row[keys[0]].includes(delimiter)) {
             const headerKeys = keys[0].split(delimiter).map((h) => h.trim());
@@ -100,93 +114,220 @@ async function importUsersFromCSV(filePath) {
         .on("error", (err) => reject(err));
     });
 
-    //Normalizar y procesar filas -> insertar en DB
+    // 3) Preparar caches y checks previos
     const errors = [];
-    let total = 0;
+    let inserted = 0;
+    let skipped = 0;
 
-    for (const originalRow of rows) {
-      const row = normalizeRowKeysAndValues(originalRow);
+    // Normalizar filas
+    const normalizedRows = rows.map(normalizeRowKeysAndValues);
 
-      const email = row.email;
-      const fullname = row.fullname;
-      const role = row.role ? row.role.toString().trim().toUpperCase() : null;
-      const current_password = row.current_password || row["current-password"] || row.password || null;
-      const status = row.status || "PENDING";
-      const specialization = row.specialization || row.especializacion || null;
-      const department = row.department || row.departamento || null;
-      const license_number = row.license_number || row.license || null;
-      const phone = row.phone || null;
-      const date_of_birth = row.date_of_birth || null;
+    // Recolectar todos los emails y license_numbers del CSV (para chequear contra DB de una sola consulta)
+    const csvEmails = [];
+    const csvLicenseNumbers = [];
+    normalizedRows.forEach((r) => {
+      if (r.email) csvEmails.push(r.email.toLowerCase().trim());
+      if (r.license_number) csvLicenseNumbers.push(r.license_number.trim());
+    });
 
-      if (!email || !fullname || !role || !current_password) {
-        errors.push(`Fila inválida: ${JSON.stringify(originalRow)}`);
+    // Buscar en DB los emails y license_numbers ya existentes
+    const existingUsersByEmail = csvEmails.length
+      ? await prisma.users.findMany({
+        where: { email: { in: csvEmails } },
+        select: { email: true },
+      })
+      : [];
+    const existingEmailsSet = new Set(existingUsersByEmail.map((u) => (u.email || "").toLowerCase()));
+
+    // Si quieres validar license_number como único en DB, haz lo mismo:
+    // const existingByLicense = csvLicenseNumbers.length ? await prisma.users.findMany({ where: { license_number: { in: csvLicenseNumbers } }, select: { license_number: true } }) : [];
+    // const existingLicenseSet = new Set(existingByLicense.map(u => u.license_number));
+
+    // Caches para departamentos y especializaciones para evitar llamadas repetidas
+    const departamentoCache = new Map(); // nombre -> id
+    const especializacionCache = new Map(); // `${nombre}|${departamentoId}` -> id
+
+    // Para detectar duplicados dentro del CSV
+    const seenEmails = new Set();
+
+    // Optional: contar cuantos usuarios ya hay ahora (si quieres asignar el primer admin)
+    // const existingCount = await prisma.users.count();
+
+    // 4) Procesar filas (secuencialmente; para archivos muy grandes conviértelo a chunks/streaming)
+    for (let i = 0; i < normalizedRows.length; i++) {
+      function calcularEdad(dateOfBirth) {
+        const today = new Date();
+        let age = today.getFullYear() - dateOfBirth.getFullYear();
+        const monthDiff = today.getMonth() - dateOfBirth.getMonth();
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dateOfBirth.getDate())) {
+          age--;
+        }
+        return age;
+      }
+      const originalRow = rows[i];
+      const row = normalizedRows[i];
+
+      // Campos comunes con normalización de nombre
+      const emailRaw = row.email;
+      const fullnameRaw = row.fullname || row.name || null;
+      const roleRaw = row.role || null;
+      const pwdRaw = row.current_password || row["current-password"] || row.password || null;
+      const statusRaw = row.status || "PENDING";
+      const specializationRaw = row.specialization || row.especializacion || null;
+      const departmentRaw = row.department || row.departamento || null;
+      const license_number_raw = row.license_number || row.license || null;
+      const phoneRaw = row.phone || null;
+      const dobRaw = row.date_of_birth || row.dob || null;
+
+      const lineInfo = `Fila ${i + 2}`; // +2 asumiendo header en línea 1
+
+      // Validaciones básicas
+      if (!emailRaw || !fullnameRaw || !pwdRaw) {
+        errors.push(`${lineInfo}: faltan campos obligatorios (email/fullname/password). Row: ${JSON.stringify(originalRow)}`);
+        skipped++;
         continue;
       }
 
-      try {
-        const hashed = await bcrypt.hash(current_password, 10);
+      const email = emailRaw.toLowerCase().trim();
 
-        // crear o buscar departamento
-        let departamentoId = null;
-        if (department) {
-          const depTrim = department.trim();
-          let dep = await prisma.departamento.findUnique({ where: { nombre: depTrim } });
-          if (!dep) {
-            dep = await prisma.departamento.create({ data: { nombre: depTrim } });
-          }
-          departamentoId = dep.id;
+      // Duplicado dentro del mismo CSV?
+      if (seenEmails.has(email)) {
+        errors.push(`${lineInfo}: email duplicado en CSV (${email})`);
+        skipped++;
+        continue;
+      }
+
+      // Duplicado contra BD?
+      if (existingEmailsSet.has(email)) {
+        errors.push(`${lineInfo}: email ya existe en BD (${email})`);
+        skipped++;
+        continue;
+      }
+
+      // Validar formato email y password
+      if (!isValidEmail(email)) {
+        errors.push(`${lineInfo}: email inválido (${email})`);
+        skipped++;
+        continue;
+      }
+
+
+      // Validar role
+      const allowedRoles = ["ADMINISTRADOR", "MEDICO", "ENFERMERA", "PACIENTE"];
+      let role = roleRaw ? roleRaw.toString().trim().toUpperCase() : null;
+      if (!role || !allowedRoles.includes(role)) {
+        role = "PACIENTE";
+      }
+
+      // Validar date_of_birth si viene
+      let parsedDob = null;
+      if (dobRaw) {
+        const dobStr = dobRaw.toString().trim();
+        if (!isValidDateIso(dobStr)) {
+          errors.push(`${lineInfo}: date_of_birth inválida o en formato incorrecto (esperado YYYY-MM-DD): ${dobStr}`);
+          skipped++;
+          continue;
+        }
+        parsedDob = new Date(dobStr);
+        if (parsedDob > new Date()) {
+          errors.push(`${lineInfo}: date_of_birth no puede ser futura: ${dobStr}`);
+          skipped++;
+          continue;
         }
 
-        // crear o buscar especializacion, vinculada a departamento si hay departamentoId
-        let especializacionId = null;
-        if (specialization) {
-          const specTrim = specialization.trim();
+        const age = calcularEdad(parsedDob);
+        if (age < 0 || age > 100) {
+          errors.push(`${lineInfo}: edad fuera de rango (0–100 años) calculada = ${age}`);
+          skipped++;
+          continue;
+        }
+      }
+
+      // Preparar departamento (cache + crear si no existe)
+      let departamentoId = null;
+      if (departmentRaw) {
+        const depName = departmentRaw.toString().trim();
+        if (departamentoCache.has(depName)) {
+          departamentoId = departamentoCache.get(depName);
+        } else {
+          let dep = await prisma.departamento.findUnique({ where: { nombre: depName } });
+          if (!dep) {
+            dep = await prisma.departamento.create({ data: { nombre: depName } });
+          }
+          departamentoCache.set(depName, dep.id);
+          departamentoId = dep.id;
+        }
+      }
+
+      // Preparar especializacion (cache + crear si no existe)
+      let especializacionId = null;
+      if (specializationRaw) {
+        const specName = specializationRaw.toString().trim();
+        const cacheKey = `${specName}|${departamentoId || ""}`;
+        if (especializacionCache.has(cacheKey)) {
+          especializacionId = especializacionCache.get(cacheKey);
+        } else {
           let spec = null;
           if (departamentoId) {
             spec = await prisma.especializacion.findFirst({
-              where: { nombre: specTrim, departamentoId: departamentoId },
+              where: { nombre: specName, departamentoId: departamentoId },
             });
+          } else {
+            spec = await prisma.especializacion.findFirst({ where: { nombre: specName } });
           }
           if (!spec) {
-            const createData = { nombre: specTrim };
+            const createData = { nombre: specName };
             if (departamentoId) createData.departamentoId = departamentoId;
             spec = await prisma.especializacion.create({ data: createData });
           }
+          especializacionCache.set(cacheKey, spec.id);
           especializacionId = spec.id;
         }
+      }
 
-        // crear usuario
+      // Hasear contraseña y crear usuario
+      try {
+        const hashed = await bcrypt.hash(pwdRaw.toString(), 10);
+
         await prisma.users.create({
           data: {
-            email: email.toLowerCase().trim(),
-            fullname: fullname.trim(),
+            email,
+            fullname: fullnameRaw.toString().trim(),
             current_password: hashed,
-            status: status.trim(),
-            role: role, 
-            license_number: license_number ? license_number.trim() : null,
-            phone: phone ? phone.trim() : null,
-            date_of_birth: date_of_birth ? new Date(date_of_birth) : null,
+            status: statusRaw ? statusRaw.toString().trim() : "PENDING",
+            role,
+            license_number: license_number_raw ? license_number_raw.toString().trim() : null,
+            phone: phoneRaw ? phoneRaw.toString().trim() : null,
+            date_of_birth: parsedDob,
             departamentoId: departamentoId,
             especializacionId: especializacionId,
           },
         });
 
-        total++;
+        // marcar email como visto para evitar duplicados posteriores en el CSV
+        seenEmails.add(email);
+        // También anotar en existingEmailsSet para evitar re-check contra BD restante
+        existingEmailsSet.add(email);
+
+        inserted++;
       } catch (err) {
-        console.error("Error creando fila:", originalRow, err.message || err);
-        errors.push(`Fila inválida: ${JSON.stringify(originalRow)} - ${err.message || err}`);
+        // Manejo de errores (ej. unique constraint race)
+        const msg = err && err.message ? err.message : String(err);
+        errors.push(`${lineInfo}: error creando usuario (${email}) - ${msg}`);
+        skipped++;
       }
     }
 
-    //remover archivo subido
+    // 5) Remover archivo temporal si existe
     try {
       if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
     } catch (e) {
       console.warn("No se pudo eliminar archivo temporal:", filePath, e.message);
     }
 
-    return { total, errors };
+    return { inserted, skipped, errors };
   } catch (error) {
+    // Dejar que el caller lo capture si quiere
     throw error;
   }
 }

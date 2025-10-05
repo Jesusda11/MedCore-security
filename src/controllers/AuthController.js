@@ -21,7 +21,8 @@ const signUp = async (req, res) => {
       date_of_birth 
     } = req.body;
 
-    if (!email || !current_password || !fullname) {
+    // Validación de campos obligatorios
+    if (!email || !current_password || !fullname || !date_of_birth) {
       return res.status(400).json({ message: "Faltan datos obligatorios" });
     }
 
@@ -40,6 +41,30 @@ const signUp = async (req, res) => {
     const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]+$/;
     if (!passwordRegex.test(current_password)) {
       return res.status(400).json({ message: "La contraseña debe tener al menos una letra y un número" });
+    }
+
+    // Validar formato de fecha (YYYY-MM-DD)
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(date_of_birth)) {
+      return res.status(400).json({ message: "La fecha de nacimiento debe tener el formato YYYY-MM-DD" });
+    }
+
+    const parsedDate = new Date(date_of_birth);
+    if (isNaN(parsedDate.getTime())) {
+      return res.status(400).json({ message: "La fecha de nacimiento no es válida" });
+    }
+
+    // Validar que no sea fecha futura
+    const today = new Date();
+    if (parsedDate > today) {
+      return res.status(400).json({ message: "La fecha de nacimiento no puede ser en el futuro" });
+    }
+
+    // Calcular edad
+    const age = calcularEdad(parsedDate);
+
+    if (age < 0 || age > 100) {
+      return res.status(400).json({ message: "La edad debe estar entre 0 y 100 años" });
     }
 
     // Validar que el email no exista
@@ -72,7 +97,7 @@ const signUp = async (req, res) => {
       departamentoId = dept.id;
     }
 
-    // Manejo de especializacion solo para MEDICO o ENFERMERA
+    // Manejo de especialización
     let especializacionId = null;
     if (especializacion) {
       if (!["MEDICO", "ENFERMERA"].includes(role)) {
@@ -102,7 +127,7 @@ const signUp = async (req, res) => {
         departamentoId,
         especializacionId,
         phone: phone || null,
-        date_of_birth: date_of_birth ? new Date(date_of_birth) : null
+        date_of_birth: parsedDate
       }
     });
 
@@ -117,7 +142,8 @@ const signUp = async (req, res) => {
         departamentoId,
         especializacionId,
         phone: createdUser.phone,
-        date_of_birth: createdUser.date_of_birth
+        date_of_birth: createdUser.date_of_birth,
+        age: age  // 👈 devolvemos edad calculada
       }
     });
 
@@ -126,6 +152,7 @@ const signUp = async (req, res) => {
     return res.status(500).json({ message: "Error interno del servidor" });
   }
 };
+
 
 const verifyEmail = async (req, res) => {
     try {
@@ -322,5 +349,16 @@ const signIn = async (req, res) => {
     res.status(500).json({ message: "Error interno del servidor" });
   }
 };
+
+// Función para calcular edad automáticamente
+function calcularEdad(dateOfBirth) {
+  const today = new Date();
+  let age = today.getFullYear() - dateOfBirth.getFullYear();
+  const monthDiff = today.getMonth() - dateOfBirth.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dateOfBirth.getDate())) {
+    age--;
+  }
+  return age;
+}
 
 module.exports = {signUp, signIn, verifyEmail, resendVerificationCode};
