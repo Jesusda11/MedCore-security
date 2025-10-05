@@ -60,7 +60,7 @@ function isValidDateIso(isoStr) {
 
 /* ---------- Main import function ---------- */
 
-async function importUsersFromCSV(filePath) {
+async function importUsersFromCSV(filePath, creatorId) {
   try {
     // 1) Leer y limpiar archivo
     let raw = fs.readFileSync(filePath, "utf8");
@@ -301,6 +301,8 @@ async function importUsersFromCSV(filePath) {
             date_of_birth: parsedDob,
             departamentoId: departamentoId,
             especializacionId: especializacionId,
+            createdById: creatorId || null,
+            updatedById: creatorId || null
           },
         });
 

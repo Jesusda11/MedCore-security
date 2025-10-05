@@ -21,46 +21,36 @@ const signUp = async (req, res) => {
       date_of_birth 
     } = req.body;
 
-    // Validación de campos obligatorios
     if (!email || !current_password || !fullname || !date_of_birth) {
       return res.status(400).json({ message: "Faltan datos obligatorios" });
     }
 
     email = email.toLowerCase().trim();
 
-    // Validar formato de email
     const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
     if (!emailRegex.test(email)) {
       return res.status(400).json({ message: "El email no es válido" });
     }
 
-    // Validar contraseña mínima y complejidad
     if (current_password.length < 6) {
       return res.status(400).json({ message: "La contraseña debe tener al menos 6 caracteres" });
     }
+
     const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]+$/;
     if (!passwordRegex.test(current_password)) {
       return res.status(400).json({ message: "La contraseña debe tener al menos una letra y un número" });
     }
 
-    // Validar formato de fecha (YYYY-MM-DD)
     const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
     if (!dateRegex.test(date_of_birth)) {
       return res.status(400).json({ message: "La fecha de nacimiento debe tener el formato YYYY-MM-DD" });
     }
 
     const parsedDate = new Date(date_of_birth);
-    if (isNaN(parsedDate.getTime())) {
+    if (isNaN(parsedDate.getTime()) || parsedDate > new Date()) {
       return res.status(400).json({ message: "La fecha de nacimiento no es válida" });
     }
 
-    // Validar que no sea fecha futura
-    const today = new Date();
-    if (parsedDate > today) {
-      return res.status(400).json({ message: "La fecha de nacimiento no puede ser en el futuro" });
-    }
-
-    // Calcular edad
     const age = calcularEdad(parsedDate);
 
     if (age < 0 || age > 100) {
@@ -75,7 +65,7 @@ const signUp = async (req, res) => {
 
     const userCount = await prisma.users.count();
 
-    // Manejo de roles
+    // Determinar rol
     if (userCount === 0) {
       role = "ADMINISTRADOR";
     } else {
@@ -87,7 +77,7 @@ const signUp = async (req, res) => {
       }
     }
 
-    // Manejo de departamento
+    // Departamento
     let departamentoId = null;
     if (departamento) {
       let dept = await prisma.departamento.findUnique({ where: { nombre: departamento } });
@@ -97,7 +87,7 @@ const signUp = async (req, res) => {
       departamentoId = dept.id;
     }
 
-    // Manejo de especialización
+    // Especialización
     let especializacionId = null;
     if (especializacion) {
       if (!["MEDICO", "ENFERMERA"].includes(role)) {
@@ -117,17 +107,26 @@ const signUp = async (req, res) => {
       especializacionId = esp.id;
     }
 
+    // Determinar quién está creando al usuario
+    let creatorId = null;
+
+    if (req.user && req.user.id) {
+      creatorId = req.user.id;
+    }
+
     const createdUser = await prisma.users.create({
       data: {
         email,
         current_password: await bcrypt.hash(current_password, 10),
         fullname,
         role,
-        status: "PENDING", 
+        status: "PENDING",
         departamentoId,
         especializacionId,
         phone: phone || null,
-        date_of_birth: parsedDate
+        date_of_birth: parsedDate,
+        createdById: creatorId,
+        updatedById: creatorId
       }
     });
 
@@ -143,7 +142,10 @@ const signUp = async (req, res) => {
         especializacionId,
         phone: createdUser.phone,
         date_of_birth: createdUser.date_of_birth,
-        age: age  // 👈 devolvemos edad calculada
+        createdById: createdUser.createdById,
+        updatedById: createdUser.updatedById,
+        createdAt: createdUser.createdAt,
+        updatedAt: createdUser.updatedAt
       }
     });
 
@@ -152,7 +154,6 @@ const signUp = async (req, res) => {
     return res.status(500).json({ message: "Error interno del servidor" });
   }
 };
-
 
 const verifyEmail = async (req, res) => {
     try {

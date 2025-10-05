@@ -12,7 +12,7 @@ const calculateAge = (birthDate) => {
   return age;
 };
 
-// Obtener todos los pacientess
+// Obtener todos los pacientes
 const getAllPatients = async (req, res) => {
   try {
     const { page = 1, limit = 10 } = req.query;
@@ -32,6 +32,8 @@ const getAllPatients = async (req, res) => {
         date_of_birth: true,
         createdAt: true,
         updatedAt: true,
+        createdBy: { select: { id: true, fullname: true, email: true } },
+        updatedBy: { select: { id: true, fullname: true, email: true } },
       },
     });
 
@@ -57,6 +59,7 @@ const getAllPatients = async (req, res) => {
   }
 };
 
+// Obtener paciente por ID
 const getPatientById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -71,7 +74,9 @@ const getPatientById = async (req, res) => {
         date_of_birth: true,
         status: true,
         createdAt: true,
-        updatedAt: true, 
+        updatedAt: true,
+        createdBy: { select: { id: true, fullname: true, email: true } },
+        updatedBy: { select: { id: true, fullname: true, email: true } },
       },
     });
 
@@ -79,7 +84,6 @@ const getPatientById = async (req, res) => {
       return res.status(404).json({ message: "Paciente no encontrado" });
     }
 
-    // calcular edad
     const age = patient.date_of_birth
       ? calculateAge(patient.date_of_birth)
       : null;
@@ -94,15 +98,13 @@ const getPatientById = async (req, res) => {
   }
 };
 
-/**
- * Actualizar paciente por ID
- */
+// Actualizar paciente
 const updatePatient = async (req, res) => {
   try {
     const { id } = req.params;
     let { fullname, email, phone, date_of_birth, status } = req.body;
+    const userId = req.user?.id;
 
-    // Validaciones básicas
     if (date_of_birth) {
       const parsedDate = new Date(date_of_birth);
       if (isNaN(parsedDate.getTime())) {
@@ -111,8 +113,7 @@ const updatePatient = async (req, res) => {
       date_of_birth = parsedDate;
     }
 
-    // Actualizar paciente en DB
-      const updatedPatient = await prisma.users.update({
+    const updatedPatient = await prisma.users.update({
       where: { id },
       data: {
         fullname: fullname || undefined,
@@ -120,6 +121,7 @@ const updatePatient = async (req, res) => {
         email: email || undefined,
         date_of_birth: date_of_birth || undefined,
         status: status || undefined,
+        updatedBy: userId ? { connect: { id: userId } } : undefined,
       },
       select: {
         id: true,
@@ -131,12 +133,12 @@ const updatePatient = async (req, res) => {
         date_of_birth: true,
         createdAt: true,
         updatedAt: true,
+        updatedBy: { select: { id: true, fullname: true, email: true } },
       },
     });
 
-    // Calcular edad dinámicamente
-    const age = updatedPatient.date_of_birth 
-      ? calculateAge(updatedPatient.date_of_birth) 
+    const age = updatedPatient.date_of_birth
+      ? calculateAge(updatedPatient.date_of_birth)
       : null;
 
     return res.status(200).json({
@@ -146,19 +148,19 @@ const updatePatient = async (req, res) => {
         age,
       },
     });
-
   } catch (error) {
     console.error("Error en updatePatient:", error);
     return res.status(500).json({ message: "Error interno del servidor" });
   }
 };
 
+// Actualizar estado del paciente
 const updatePatientState = async (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
+    const userId = req.user?.id;
 
-    // Validar status permitido
     const allowedStatus = ["ACTIVE", "INACTIVE"];
     if (!allowedStatus.includes(status)) {
       return res.status(400).json({
@@ -166,7 +168,6 @@ const updatePatientState = async (req, res) => {
       });
     }
 
-    // Buscar paciente
     const patient = await prisma.users.findFirst({
       where: { id, role: "PACIENTE" },
     });
@@ -175,10 +176,12 @@ const updatePatientState = async (req, res) => {
       return res.status(404).json({ message: "Paciente no encontrado" });
     }
 
-    // Actualizar estado
     const updatedPatient = await prisma.users.update({
       where: { id: patient.id },
-      data: { status },
+      data: {
+        status,
+        updatedBy: userId ? { connect: { id: userId } } : undefined,
+      },
       select: {
         id: true,
         email: true,
@@ -186,12 +189,15 @@ const updatePatientState = async (req, res) => {
         phone: true,
         date_of_birth: true,
         status: true,
-      }
+        createdAt: true,
+        updatedAt: true,
+        updatedBy: { select: { id: true, fullname: true, email: true } },
+      },
     });
 
     return res.json({
       message: "Estado del paciente actualizado correctamente",
-      patient: updatedPatient
+      patient: updatedPatient,
     });
   } catch (error) {
     console.error("Error en updatePatientState:", error);
@@ -199,10 +205,9 @@ const updatePatientState = async (req, res) => {
   }
 };
 
-
 module.exports = {
   getAllPatients,
   getPatientById,
   updatePatient,
-  updatePatientState
+  updatePatientState,
 };

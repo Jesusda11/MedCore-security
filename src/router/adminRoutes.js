@@ -46,7 +46,8 @@ router.post(
         return res.status(400).json({ message: "Debes subir un archivo CSV válido" });
       }
 
-      const result = await importUsersFromCSV(req.file.path);
+      const creatorId = req.user?.id || null
+      const result = await importUsersFromCSV(req.file.path, creatorId);
 
       return res.json({
         message: `Proceso de importación finalizado`,
