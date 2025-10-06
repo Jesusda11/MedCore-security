@@ -1,0 +1,17 @@
+services:
+  api:
+    image: ms-security:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    ports:
+      - "3002:3002"
+    networks:
+      - medcore-network
+    restart: unless-stopped
+
+networks:
+  medcore-network:
+    driver: bridge
+    external: true
