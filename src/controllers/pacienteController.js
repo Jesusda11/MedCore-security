@@ -25,6 +25,7 @@ const getAllPatients = async (req, res) => {
       select: {
         id: true,
         email: true,
+        identificacion: true,
         fullname: true,
         current_password: true,
         status: true,
@@ -70,6 +71,7 @@ const getPatientById = async (req, res) => {
         id: true,
         fullname: true,
         email: true,
+        identificacion: true,
         phone: true,
         date_of_birth: true,
         status: true,
@@ -102,7 +104,7 @@ const getPatientById = async (req, res) => {
 const updatePatient = async (req, res) => {
   try {
     const { id } = req.params;
-    let { fullname, email, phone, date_of_birth, status } = req.body;
+    let { fullname, identificacion, email, phone, date_of_birth, status } = req.body;
     const userId = req.user?.id;
 
     if (date_of_birth) {
@@ -116,6 +118,7 @@ const updatePatient = async (req, res) => {
     const updatedPatient = await prisma.users.update({
       where: { id },
       data: {
+        identificacion: identificacion || undefined,
         fullname: fullname || undefined,
         phone: phone || undefined,
         email: email || undefined,
@@ -126,6 +129,7 @@ const updatePatient = async (req, res) => {
       select: {
         id: true,
         email: true,
+        identificacion: true,
         fullname: true,
         current_password: true,
         status: true,
@@ -185,6 +189,7 @@ const updatePatientState = async (req, res) => {
       select: {
         id: true,
         email: true,
+        identificacion: true,
         fullname: true,
         phone: true,
         date_of_birth: true,

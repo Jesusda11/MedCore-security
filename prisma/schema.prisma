@@ -43,6 +43,7 @@ model Especializacion {
 model Users {
   id                      String    @id @default(auto()) @map("_id") @db.ObjectId
   email                   String    @unique
+  identificacion          String    @unique
   fullname                String
   current_password        String
   status                  String    @default("PENDING")
@@ -53,15 +54,15 @@ model Users {
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
 
-  // Auditoría (foreign keys deben tener @db.ObjectId para MongoDB)
+  // Auditoría 
   createdById String? @db.ObjectId
   updatedById String? @db.ObjectId
 
-  // Self-relations: en el lado con fields/references hay que poner onDelete/onUpdate = NoAction
+  // Self-relations
   createdBy Users? @relation("UserCreatedBy", fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
   updatedBy Users? @relation("UserUpdatedBy", fields: [updatedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
-  // Lado inverso (colecciones) — sin fields/references ni acciones
+  // (colecciones) — sin fields/references ni acciones
   createdUsers Users[] @relation("UserCreatedBy")
   updatedUsers Users[] @relation("UserUpdatedBy")
 

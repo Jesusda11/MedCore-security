@@ -1,4 +1,3 @@
-// src/controllers/adminController.js
 const fs = require("fs");
 const path = require("path");
 const { Readable } = require("stream");
@@ -124,36 +123,40 @@ async function importUsersFromCSV(filePath, creatorId) {
 
     // Recolectar todos los emails y license_numbers del CSV (para chequear contra DB de una sola consulta)
     const csvEmails = [];
+    const csvIdentificaciones = [];
     const csvLicenseNumbers = [];
     normalizedRows.forEach((r) => {
       if (r.email) csvEmails.push(r.email.toLowerCase().trim());
+      if (r.id) csvIdentificaciones.push(r.id.trim());
       if (r.license_number) csvLicenseNumbers.push(r.license_number.trim());
     });
 
-    // Buscar en DB los emails y license_numbers ya existentes
-    const existingUsersByEmail = csvEmails.length
-      ? await prisma.users.findMany({
-        where: { email: { in: csvEmails } },
-        select: { email: true },
-      })
-      : [];
+    // Buscar en BD los emails y las identificaciones ya existentes
+    const [existingUsersByEmail, existingUsersByIdentificacion] = await Promise.all([
+      csvEmails.length
+        ? prisma.users.findMany({
+          where: { email: { in: csvEmails } },
+          select: { email: true },
+        })
+        : [],
+      csvIdentificaciones.length
+        ? prisma.users.findMany({
+          where: { identificacion: { in: csvIdentificaciones } },
+          select: { identificacion: true },
+        })
+        : [],
+    ]);
+
     const existingEmailsSet = new Set(existingUsersByEmail.map((u) => (u.email || "").toLowerCase()));
+    const existingIdentificacionesSet = new Set(existingUsersByIdentificacion.map((u) => (u.identificacion || "").trim()));
 
-    // Si quieres validar license_number como único en DB, haz lo mismo:
-    // const existingByLicense = csvLicenseNumbers.length ? await prisma.users.findMany({ where: { license_number: { in: csvLicenseNumbers } }, select: { license_number: true } }) : [];
-    // const existingLicenseSet = new Set(existingByLicense.map(u => u.license_number));
-
-    // Caches para departamentos y especializaciones para evitar llamadas repetidas
-    const departamentoCache = new Map(); // nombre -> id
-    const especializacionCache = new Map(); // `${nombre}|${departamentoId}` -> id
+    const departamentoCache = new Map();
+    const especializacionCache = new Map();
 
     // Para detectar duplicados dentro del CSV
     const seenEmails = new Set();
 
-    // Optional: contar cuantos usuarios ya hay ahora (si quieres asignar el primer admin)
-    // const existingCount = await prisma.users.count();
 
-    // 4) Procesar filas (secuencialmente; para archivos muy grandes conviértelo a chunks/streaming)
     for (let i = 0; i < normalizedRows.length; i++) {
       function calcularEdad(dateOfBirth) {
         const today = new Date();
@@ -168,6 +171,7 @@ async function importUsersFromCSV(filePath, creatorId) {
       const row = normalizedRows[i];
 
       // Campos comunes con normalización de nombre
+      const idRaw = row.id || null;
       const emailRaw = row.email;
       const fullnameRaw = row.fullname || row.name || null;
       const roleRaw = row.role || null;
@@ -182,8 +186,9 @@ async function importUsersFromCSV(filePath, creatorId) {
       const lineInfo = `Fila ${i + 2}`; // +2 asumiendo header en línea 1
 
       // Validaciones básicas
-      if (!emailRaw || !fullnameRaw || !pwdRaw) {
-        errors.push(`${lineInfo}: faltan campos obligatorios (email/fullname/password). Row: ${JSON.stringify(originalRow)}`);
+      if (!idRaw || !emailRaw || !fullnameRaw || !pwdRaw) {
+        errors.push(`${lineInfo}:
+           faltan campos obligatorios (identificacion/email/fullname/password). Row: ${JSON.stringify(originalRow)}`);
         skipped++;
         continue;
       }
@@ -211,6 +216,32 @@ async function importUsersFromCSV(filePath, creatorId) {
         continue;
       }
 
+      // Validar duplicado dentro del CSV
+      if (idRaw) {
+        const idTrim = idRaw.trim();
+        if (seenEmails.has(idTrim)) {
+          errors.push(`${lineInfo}: identificacion duplicada en CSV (${idTrim})`);
+          skipped++;
+          continue;
+        }
+
+        if (existingIdentificacionesSet.has(idTrim)) {
+          errors.push(`${lineInfo}: identificacion ya existe en BD (${idTrim})`);
+          skipped++;
+          continue;
+        }
+
+        if (!idRaw) {
+          errors.push(`${lineInfo}: identificación vacía`);
+          continue;
+        }
+
+        if (!/^[0-9]{5,15}$/.test(idRaw)) {
+          errors.push(`${lineInfo}: identificación inválida (${idTrim}) - debe tener entre 5 y 15 caracteres y contener solo números`);
+          skipped++;
+          continue;
+        }
+      }
 
       // Validar role
       const allowedRoles = ["ADMINISTRADOR", "MEDICO", "ENFERMERA", "PACIENTE"];
@@ -285,12 +316,21 @@ async function importUsersFromCSV(filePath, creatorId) {
         }
       }
 
+      // Validar estado permitido
+      const allowedStatuses = ["PENDING", "ACTIVE", "INACTIVE"];
+      if (!allowedStatuses.includes(statusRaw.toUpperCase())) {
+        errors.push(`${lineInfo}: estado inválido (${statusRaw}), permitido: ${allowedStatuses.join(", ")}`);
+        skipped++;
+        continue;
+      }
+
       // Hasear contraseña y crear usuario
       try {
         const hashed = await bcrypt.hash(pwdRaw.toString(), 10);
 
         await prisma.users.create({
           data: {
+            identificacion: idRaw ? idRaw.toString().trim() : null,
             email,
             fullname: fullnameRaw.toString().trim(),
             current_password: hashed,
@@ -310,6 +350,10 @@ async function importUsersFromCSV(filePath, creatorId) {
         seenEmails.add(email);
         // También anotar en existingEmailsSet para evitar re-check contra BD restante
         existingEmailsSet.add(email);
+
+        if (idRaw) {
+          existingIdentificacionesSet.add(idRaw.trim());
+        }
 
         inserted++;
       } catch (err) {

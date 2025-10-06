@@ -13,7 +13,8 @@ const signUp = async (req, res) => {
     let { 
       email, 
       current_password, 
-      fullname, 
+      fullname,
+      identificacion,
       role, 
       departamento, 
       especializacion, 
@@ -21,12 +22,20 @@ const signUp = async (req, res) => {
       date_of_birth 
     } = req.body;
 
-    if (!email || !current_password || !fullname || !date_of_birth) {
+    if (!email || !current_password || !fullname || !date_of_birth || !identificacion) {
       return res.status(400).json({ message: "Faltan datos obligatorios" });
     }
 
+    identificacion = identificacion.trim();
     email = email.toLowerCase().trim();
 
+    // Validar identificacion (solo números y longitud entre 5 y 15)
+    const idRegex = /^[0-9]{5,15}$/;
+    if (!idRegex.test(identificacion)) {
+      return res.status(400).json({ message: "La identificación no es válida (debe contener solo números)" });
+    }
+
+    //Validar email, password y date_of_birth
     const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
     if (!emailRegex.test(email)) {
       return res.status(400).json({ message: "El email no es válido" });
@@ -57,9 +66,18 @@ const signUp = async (req, res) => {
       return res.status(400).json({ message: "La edad debe estar entre 0 y 100 años" });
     }
 
-    // Validar que el email no exista
-    const userExist = await prisma.users.findUnique({ where: { email } });
-    if (userExist) {
+    // Verificar si la identificacion ya existe
+    const existingUser = await prisma.users.findFirst({
+    where: {identificacion}
+    });
+    if (existingUser) {
+      return res.status(400).json({ message: "La identificación ya está registrada" });
+    }
+
+    const existingEmailUser = await prisma.users.findFirst({
+    where: {email}
+    });
+    if (existingEmailUser) {
       return res.status(400).json({ message: "El correo ya está registrado" });
     }
 
@@ -119,6 +137,7 @@ const signUp = async (req, res) => {
         email,
         current_password: await bcrypt.hash(current_password, 10),
         fullname,
+        identificacion,
         role,
         status: "PENDING",
         departamentoId,
@@ -136,6 +155,7 @@ const signUp = async (req, res) => {
         id: createdUser.id,
         email: createdUser.email,
         fullname: createdUser.fullname,
+        identificacion: createdUser.identificacion,
         status: createdUser.status,
         role: createdUser.role,
         departamentoId,
