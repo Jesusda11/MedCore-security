@@ -2,176 +2,22 @@ const { PrismaClient } = require('../generated/prisma');
 const prisma = new PrismaClient();
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-//Para envio de correos electronicos
 const nodemailer = require('nodemailer');
 const { generateVerificationCode, sendVerificationEmail } = require('../config/emailConfig');
 const { generateAccessToken, generateRefreshToken } = require("../config/jwtConfig");
+const { createUserBase } = require("../services/userService");
 
 
 const signUp = async (req, res) => {
   try {
-    let { 
-      email, 
-      current_password, 
-      fullname,
-      identificacion,
-      role, 
-      departamento, 
-      especializacion, 
-      phone, 
-      date_of_birth 
-    } = req.body;
+    const user = await createUserBase(req.body);
 
-    if (!email || !current_password || !fullname || !date_of_birth || !identificacion) {
-      return res.status(400).json({ message: "Faltan datos obligatorios" });
-    }
-
-    identificacion = identificacion.trim();
-    email = email.toLowerCase().trim();
-
-    // Validar identificacion (solo números y longitud entre 5 y 15)
-    const idRegex = /^[0-9]{5,15}$/;
-    if (!idRegex.test(identificacion)) {
-      return res.status(400).json({ message: "La identificación no es válida (debe contener solo números)" });
-    }
-
-    //Validar email, password y date_of_birth
-    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-    if (!emailRegex.test(email)) {
-      return res.status(400).json({ message: "El email no es válido" });
-    }
-
-    if (current_password.length < 6) {
-      return res.status(400).json({ message: "La contraseña debe tener al menos 6 caracteres" });
-    }
-
-    const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]+$/;
-    if (!passwordRegex.test(current_password)) {
-      return res.status(400).json({ message: "La contraseña debe tener al menos una letra y un número" });
-    }
-
-    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-    if (!dateRegex.test(date_of_birth)) {
-      return res.status(400).json({ message: "La fecha de nacimiento debe tener el formato YYYY-MM-DD" });
-    }
-
-    const parsedDate = new Date(date_of_birth);
-    if (isNaN(parsedDate.getTime()) || parsedDate > new Date()) {
-      return res.status(400).json({ message: "La fecha de nacimiento no es válida" });
-    }
-
-    const age = calcularEdad(parsedDate);
-
-    if (age < 0 || age > 100) {
-      return res.status(400).json({ message: "La edad debe estar entre 0 y 100 años" });
-    }
-
-    // Verificar si la identificacion ya existe
-    const existingUser = await prisma.users.findFirst({
-    where: {identificacion}
+    res.status(201).json({
+      message: "Usuario registrado correctamente. Verifique su cuenta al iniciar sesión.",
+      user: { id: user.id, email: user.email, status: user.status }
     });
-    if (existingUser) {
-      return res.status(400).json({ message: "La identificación ya está registrada" });
-    }
-
-    const existingEmailUser = await prisma.users.findFirst({
-    where: {email}
-    });
-    if (existingEmailUser) {
-      return res.status(400).json({ message: "El correo ya está registrado" });
-    }
-
-    const userCount = await prisma.users.count();
-
-    // Determinar rol
-    if (userCount === 0) {
-      role = "ADMINISTRADOR";
-    } else {
-      const allowedRoles = ["ADMINISTRADOR", "MEDICO", "ENFERMERA", "PACIENTE"];
-      if (!role || !allowedRoles.includes(role.toUpperCase())) {
-        role = "PACIENTE";
-      } else {
-        role = role.toUpperCase();
-      }
-    }
-
-    // Departamento
-    let departamentoId = null;
-    if (departamento) {
-      let dept = await prisma.departamento.findUnique({ where: { nombre: departamento } });
-      if (!dept) {
-        dept = await prisma.departamento.create({ data: { nombre: departamento } });
-      }
-      departamentoId = dept.id;
-    }
-
-    // Especialización
-    let especializacionId = null;
-    if (especializacion) {
-      if (!["MEDICO", "ENFERMERA"].includes(role)) {
-        return res.status(400).json({ message: "Solo los médicos o enfermeras pueden tener especialización" });
-      }
-      if (!departamentoId) {
-        return res.status(400).json({ message: "Debe especificar un departamento para la especialización" });
-      }
-      let esp = await prisma.especializacion.findFirst({
-        where: { nombre: especializacion, departamentoId }
-      });
-      if (!esp) {
-        esp = await prisma.especializacion.create({
-          data: { nombre: especializacion, departamentoId }
-        });
-      }
-      especializacionId = esp.id;
-    }
-
-    // Determinar quién está creando al usuario
-    let creatorId = null;
-
-    if (req.user && req.user.id) {
-      creatorId = req.user.id;
-    }
-
-    const createdUser = await prisma.users.create({
-      data: {
-        email,
-        current_password: await bcrypt.hash(current_password, 10),
-        fullname,
-        identificacion,
-        role,
-        status: "PENDING",
-        departamentoId,
-        especializacionId,
-        phone: phone || null,
-        date_of_birth: parsedDate,
-        createdById: creatorId,
-        updatedById: creatorId
-      }
-    });
-
-    return res.status(201).json({
-      message: "Usuario creado correctamente. Debe iniciar sesión para verificar su cuenta.",
-      user: {
-        id: createdUser.id,
-        email: createdUser.email,
-        fullname: createdUser.fullname,
-        identificacion: createdUser.identificacion,
-        status: createdUser.status,
-        role: createdUser.role,
-        departamentoId,
-        especializacionId,
-        phone: createdUser.phone,
-        date_of_birth: createdUser.date_of_birth,
-        createdById: createdUser.createdById,
-        updatedById: createdUser.updatedById,
-        createdAt: createdUser.createdAt,
-        updatedAt: createdUser.updatedAt
-      }
-    });
-
-  } catch (error) {
-    console.error("Error en signUp:", error);
-    return res.status(500).json({ message: "Error interno del servidor" });
+  } catch (err) {
+    res.status(400).json({ message: err.message });
   }
 };
 
