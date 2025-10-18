@@ -39,7 +39,7 @@ class AuditInterceptor {
 
       const eventType = this.determineEventType(
         req.method,
-        req.path,
+        req.originalUrl,
         res.statusCode,
       );
 
@@ -65,7 +65,7 @@ class AuditInterceptor {
         metadata: {
           timestamp: new Date().toISOString(),
           userRole: req.user?.role,
-          endpoint: `${req.method} ${req.path}`,
+          endpoint: `${req.method} ${req.originalUrl}`,
         },
       };
 
