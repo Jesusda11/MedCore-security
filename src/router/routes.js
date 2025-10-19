@@ -16,4 +16,7 @@ router.use("/admin", adminRoutes)
 router.use("/doctors", doctorRoutes);
 
 router.use("/nurses", nurseRoutes);
+
+router.use("/", userRoutes);
+
 module.exports = router;
