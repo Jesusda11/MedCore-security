@@ -3,10 +3,19 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const routes = require("./router/routes");
 const cors = require("cors");
+const {
+  auditInterceptor,
+  initialize,
+  disconnect,
+} = require("./interceptors/auditInterceptor");
+
 require("dotenv").config();
 
 const port = process.env.PORT || 3000;
 const app = express();
+
+// Interceptor audit for all routes
+app.use(auditInterceptor);
 
 app.use(
   cors({
@@ -19,7 +28,18 @@ app.use(bodyParser.json());
 
 app.use("/api/v1", routes);
 
-app.listen(port, () => {
+process.on("SIGINT", async () => {
+  await disconnect();
+  process.exit(0);
+});
+
+process.on("SIGTERM", async () => {
+  await disconnect();
+  process.exit(0);
+});
+
+app.listen(port, async () => {
   console.log(`Server is running on port ${port}`);
-  database();
+  await database();
+  await initialize();
 });
