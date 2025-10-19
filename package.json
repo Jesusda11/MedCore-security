@@ -12,8 +12,8 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
-    "docker:build": "docker build -t ms-security:latest . ",
-    "docker:run": "docker run -p 3002:3002 ms-security:latest"
+    "docker:build": "docker compose build",
+    "docker:run": "docker compose up -d --remove-orphans"
   },
   "keywords": [],
   "author": "",
