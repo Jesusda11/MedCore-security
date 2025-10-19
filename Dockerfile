@@ -14,7 +14,7 @@ RUN npm run build
 
 FROM node:20-alpine AS production
 
-RUN apk add --no-cache dumb-init
+RUN apk add --no-cache dumb-init curl
 
 RUN addgroup -g 1001 -S nodejs
 RUN adduser -S medcore -u 1001
