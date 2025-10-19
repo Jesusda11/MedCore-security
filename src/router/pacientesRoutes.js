@@ -1,12 +1,15 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const pacienteController = require('../controllers/pacienteController');
-const authMiddleware = require("../middleware/authMiddleware");
+const pacienteController = require("../controllers/pacienteController");
 const isAdminMiddleware = require("../middleware/adminMiddleware");
 
-router.get('/', authMiddleware, pacienteController.getAllPatients);
-router.get('/:id', authMiddleware, pacienteController.getPatientById);
-router.put('/:id', authMiddleware, pacienteController.updatePatient);
-router.patch('/:id/state', authMiddleware, isAdminMiddleware, pacienteController.updatePatientState);
+router.get("/", pacienteController.getAllPatients);
+router.get("/:id", pacienteController.getPatientById);
+router.put("/:id", pacienteController.updatePatient);
+router.patch(
+  "/:id/state",
+  isAdminMiddleware,
+  pacienteController.updatePatientState,
+);
 
 module.exports = router;

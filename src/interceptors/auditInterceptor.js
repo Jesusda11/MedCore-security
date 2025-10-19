@@ -47,6 +47,7 @@ class AuditInterceptor {
         eventType,
         source: "ms-security",
         userId: req.user?.id,
+        userRole: req.user?.role,
         sessionId: req.user?.sessionId,
         severityLevel: severity,
         data: {
