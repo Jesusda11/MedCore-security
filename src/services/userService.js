@@ -220,9 +220,6 @@ const toggleUserStatus = async (id, updaterId = null) => {
   return updatedUser;
 };
 
-module.exports = { createUserBase, getBaseUserById, updateUserBase, toggleUserStatus };
-
-
 // Obtener usuario por ID
 async function userById(userId) {
   try {
@@ -247,5 +244,5 @@ async function userById(userId) {
     throw new Error("Error fetching user by ID: " + error.message);
   }
 }
+module.exports = { createUserBase, getBaseUserById, updateUserBase, toggleUserStatus, userById };
 
-module.exports = { createUserBase, userById };
