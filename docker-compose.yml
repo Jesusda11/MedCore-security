@@ -12,6 +12,8 @@ services:
     restart: unless-stopped
 
 networks:
-  medcore-network:
+  medcore-network-external:
     driver: bridge
     external: true
+  medcore-network-local:
+    driver: bridge
