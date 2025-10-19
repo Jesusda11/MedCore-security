@@ -5,6 +5,10 @@ services:
       context: .
       dockerfile: Dockerfile
       target: production
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
     ports:
       - "3002:3002"
     expose:

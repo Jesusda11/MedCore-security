@@ -25,7 +25,6 @@ COPY --from=builder --chown=medcore:nodejs /app/dist ./dist
 COPY --from=builder --chown=medcore:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=medcore:nodejs /app/prisma ./prisma
 COPY --from=builder --chown=medcore:nodejs /app/package*.json ./
-COPY --from=builder --chown=medcore:nodejs /app/.env* ./
 
 RUN npm prune --omit=dev
 RUN npm install module-alias --production
