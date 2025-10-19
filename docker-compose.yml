@@ -1,0 +1,10 @@
+services:
+  api:
+    image: ms-security:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    ports:
+      - "3002:3002"
+    restart: unless-stopped
