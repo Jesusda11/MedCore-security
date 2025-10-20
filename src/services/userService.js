@@ -244,5 +244,127 @@ async function userById(userId) {
     throw new Error("Error fetching user by ID: " + error.message);
   }
 }
-module.exports = { createUserBase, getBaseUserById, updateUserBase, toggleUserStatus, userById };
+
+const usersByRole = async (role, page = 1, limit = 20) => {
+  const validRoles = ["ADMINISTRADOR", "MEDICO", "ENFERMERA", "PACIENTE"];
+  const normalizedRole = role.toUpperCase();
+
+  if (!validRoles.includes(normalizedRole)) {
+    throw new Error("Rol no válido");
+  }
+
+  const skip = (parseInt(page) - 1) * limit;
+
+  const [users, total] = await Promise.all([
+    prisma.users.findMany({
+      where: { role: normalizedRole},
+      skip,
+      take: limit,
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        fullname: true,
+        email: true,
+        role: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+        departamento: { select: { nombre: true } },
+        especializacion: { select: { nombre: true } },
+      },
+    }),
+    prisma.users.count({
+      where: { role: normalizedRole},
+    }),
+  ]);
+
+  return {
+    users,
+    total,
+    totalPages: Math.ceil(total / limit),
+  };
+};
+
+const usersByRoleAndStatus = async (role, status = null, page = 1, limit = 20) => {
+  const normalizedRole = role.toUpperCase();
+  const where = { role: normalizedRole };
+
+  if (status) {
+    const validStatuses = ["ACTIVE", "INACTIVE", "PENDING"];
+    const normalizedStatus = status.toUpperCase();
+
+    if (!validStatuses.includes(normalizedStatus)) {
+      throw new Error("Estado no válido. Debe ser ACTIVE, INACTIVE o PENDING");
+    }
+    where.status = normalizedStatus;
+  }
+
+  const skip = (page - 1) * limit;
+
+  const [total, users] = await Promise.all([
+    prisma.users.count({ where }),
+    prisma.users.findMany({
+      where,
+      skip,
+      take: limit,
+      select: {
+        id: true,
+        fullname: true,
+        email: true,
+        identificacion: true,
+        role: true,
+        status: true,
+        phone: true,
+        license_number: true,
+        date_of_birth: true,
+        createdAt: true,
+        updatedAt: true,
+        especializacionId: true,
+        departamentoId: true,
+        createdBy: { select: { fullname: true, email: true } },
+        updatedBy: { select: { fullname: true, email: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    }),
+  ]);
+
+  const totalPages = Math.ceil(total / limit);
+
+  return { total, totalPages, users };
+};
+
+const searchUsers = async (query) => {
+  return await prisma.users.findMany({
+    where: {
+      OR: [
+        { fullname: { contains: query, mode: "insensitive" } },
+        { identificacion: { contains: query } },
+      ],
+    },
+    select: {
+      id: true,
+      fullname: true,
+      email: true,
+      identificacion: true,
+      role: true,
+      status: true,
+    },
+    orderBy: { fullname: "asc" },
+  });
+};
+
+
+module.exports = {
+  createUserBase,
+  getBaseUserById,
+  updateUserBase,
+  toggleUserStatus,
+  userById,
+  usersByRoleAndStatus,
+  usersByRole,
+  searchUsers
+};
+
+
+
 

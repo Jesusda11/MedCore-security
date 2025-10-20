@@ -1,5 +1,8 @@
 const { PrismaClient } = require("../generated/prisma");
-const { userById } = require("../services/userService");
+const { userById, usersByRole, usersByRoleAndStatus, searchUsers} = require("../services/userService");
+const { updateUserBase } = require("../services/userService");
+const { updateDoctor } = require("./doctorController");
+const { updateNurse } = require("./nurseController");
 const prisma = new PrismaClient();
 
 const getUsersByRole = async (req, res) => {
@@ -7,53 +10,26 @@ const getUsersByRole = async (req, res) => {
     const { role, page = 1 } = req.query;
 
     if (!role) {
-      return res.status(400).json({ message: "Debe especificar el parámetro 'role'" });
+      return res.status(400).json({ 
+        message: "Debe especificar el parámetro 'role'" 
+      });
     }
 
-    const validRoles = ["ADMINISTRADOR", "MEDICO", "ENFERMERA", "PACIENTE"];
-    const normalizedRole = role.toUpperCase();
+    const result = await usersByRole(role, page);
 
-    if (!validRoles.includes(normalizedRole)) {
-      return res.status(400).json({ message: "Rol no válido" });
-    }
-
-    const limit = 20;
-    const skip = (parseInt(page) - 1) * limit;
-
-    const total = await prisma.users.count({
-      where: { role: normalizedRole, status: "ACTIVE" },
-    });
-
-    const users = await prisma.users.findMany({
-      where: { role: normalizedRole, status: "ACTIVE" },
-      skip,
-      take: limit,
-      orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        fullname: true,
-        email: true,
-        role: true,
-        status: true,
-        createdAt: true,
-        updatedAt: true,
-        departamento: { select: { nombre: true } },
-        especializacion: { select: { nombre: true } },
-      },
-    });
-
-    res.status(200).json({
+    return res.status(200).json({
       page: parseInt(page),
-      total,
-      totalPages: Math.ceil(total / limit),
-      users,
+      total: result.total,
+      totalPages: result.totalPages,
+      users: result.users,
     });
   } catch (error) {
     console.error("Error en getUsersByRole:", error);
-    res.status(500).json({ message: "Error interno del servidor" });
+    return res.status(400).json({ 
+      message: error.message || "Error interno del servidor" 
+    });
   }
 };
-
 /**
  * Get user by ID
  */
@@ -71,4 +47,104 @@ const getUserById = async (req, res) => {
   }
 };
 
-module.exports = { getUsersByRole, getUserById };
+const getUsersByRoleAndStatus = async (req, res) => {
+  try {
+    const { role, status, page = 1, limit = 20 } = req.query;
+
+    if (!role) {
+      return res.status(400).json({
+        message: "Debe especificar el parámetro 'role'",
+      });
+    }
+
+    const result = await usersByRoleAndStatus(
+      role,
+      status,
+      parseInt(page),
+      parseInt(limit)
+    );
+
+    if (!result.users.length) {
+      return res.status(404).json({
+        message: "No se encontraron usuarios con esos criterios",
+      });
+    }
+
+    return res.status(200).json({
+      page: parseInt(page),
+      total: result.total,
+      totalPages: result.totalPages,
+      users: result.users,
+    });
+  } catch (error) {
+    console.error("Error en getUsersByRoleAndStatus:", error);
+    return res.status(400).json({
+      message: error.message || "Error interno del servidor",
+    });
+  }
+};
+
+const getUsersBySearch = async (req, res) => {
+  try {
+    const { role, query } = req.query;
+
+    if (!query) {
+      return res.status(400).json({
+        message: "Debe especificar el parámetro 'query'",
+      });
+    }
+
+    const users = await searchUsers(query, role);
+
+    if (!users.length) {
+      return res.status(404).json({ message: "No se encontraron usuarios" });
+    }
+
+    return res.status(200).json({
+      total: users.length,
+      users,
+    });
+  } catch (error) {
+    console.error("Error en getUsersBySearch:", error);
+    return res.status(500).json({
+      message: "Error interno del servidor",
+    });
+  }
+};
+
+
+const updateUserByRole = async (req, res) => {
+  try {
+    const { id } = req.params; 
+    const currentUserId = req.user?.id; 
+
+    const user = await prisma.users.findUnique({
+      where: { id },
+      select: { id: true, role: true },
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: "Usuario no encontrado" });
+    }
+
+    switch (user.role) {
+      case "MEDICO":
+        return await updateDoctor(req, res);
+
+      case "ENFERMERA":
+        return await updateNurse(req, res);
+
+      case "PACIENTE":
+        return await updateUserBase(id, req.body, currentUserId);
+
+      default:
+        return res.status(400).json({ message: "Rol no soportado" });
+    }
+  } catch (error) {
+    console.error("Error en updateUserByRole:", error);
+    return res.status(500).json({ message: "Error interno del servidor" });
+  }
+};
+
+
+module.exports = { getUsersByRole, getUserById, getUsersByRoleAndStatus, getUsersBySearch, updateUserByRole};

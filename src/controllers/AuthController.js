@@ -6,18 +6,54 @@ const nodemailer = require('nodemailer');
 const { generateVerificationCode, sendVerificationEmail } = require('../config/emailConfig');
 const { generateAccessToken, generateRefreshToken } = require("../config/jwtConfig");
 const { createUserBase } = require("../services/userService");
+const { registerDoctor } = require("../controllers/doctorController");
+const { registerNurse } = require("../controllers/nurseController");
 
 
 const signUp = async (req, res) => {
   try {
-    const user = await createUserBase(req.body);
+    const { role } = req.body;
 
-    res.status(201).json({
-      message: "Usuario registrado correctamente. Verifique su cuenta al iniciar sesión.",
-      user: { id: user.id, email: user.email, status: user.status }
+    if (!role) {
+      return res.status(400).json({ 
+        message: "Debe especificar un rol (PACIENTE, MEDICO, ENFERMERA)" 
+      });
+    }
+
+    const validRoles = ["PACIENTE", "MEDICO", "ENFERMERA"];
+    if (!validRoles.includes(role)) {
+      return res.status(400).json({ message: "Rol no válido" });
+    }
+    switch (role) {
+      case "PACIENTE":
+        const patient = await createUserBase({
+          ...req.body,
+          role: "PACIENTE",
+        });
+        
+        return res.status(201).json({
+          message: "Paciente registrado correctamente. Verifique su cuenta al iniciar sesión.",
+          user: {
+            id: patient.id,
+            email: patient.email,
+            fullname: patient.fullname,
+            role: patient.role,
+            status: patient.status,
+          },
+        });
+
+      case "MEDICO":
+    
+        return await registerDoctor(req, res);
+
+      case "ENFERMERA":
+        return await registerNurse(req, res);
+    }
+  } catch (error) {
+    console.error("Error en signUp:", error);
+    return res.status(400).json({ 
+      message: error.message || "Error interno del servidor" 
     });
-  } catch (err) {
-    res.status(400).json({ message: err.message });
   }
 };
 
