@@ -5,6 +5,20 @@ services:
       context: .
       dockerfile: Dockerfile
       target: production
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
     ports:
       - "3002:3002"
+    expose:
+      - "3022"
+    networks:
+      medcore-network:
+        aliases:
+          - ms-security
     restart: unless-stopped
+
+networks:
+  medcore-network:
+    external: true

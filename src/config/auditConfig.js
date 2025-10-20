@@ -11,7 +11,7 @@ function generateUuidV4() {
   bytes[6] = (bytes[6] & 0x0f) | 0x40;
   bytes[8] = (bytes[8] & 0x3f) | 0x80;
   const hex = bytes.toString("hex");
-  
+
   return (
     hex.slice(0, 8) +
     "-" +
@@ -90,6 +90,7 @@ class AuditConfig {
         source: eventData.source || "ms-security",
         timestamp: new Date(),
         userId: eventData.userId || "anonymous",
+        userRole: eventData.userRole || "unknown",
         sessionId: eventData.sessionId,
         severityLevel: eventData.severityLevel,
         data: eventData.data,

@@ -3,19 +3,12 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const routes = require("./router/routes");
 const cors = require("cors");
-const {
-  auditInterceptor,
-  initialize,
-  disconnect,
-} = require("./interceptors/auditInterceptor");
+const { initialize, disconnect } = require("./interceptors/auditInterceptor");
 
 require("dotenv").config();
 
 const port = process.env.PORT || 3000;
 const app = express();
-
-// Interceptor audit for all routes
-app.use(auditInterceptor);
 
 app.use(
   cors({
