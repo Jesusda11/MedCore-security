@@ -5,6 +5,7 @@ const isAdminMiddleware = require("../middleware/adminMiddleware");
 
 router.get("/", pacienteController.getAllPatients);
 router.get("/:id", pacienteController.getPatientById);
+router.post("/", pacienteController.createPatient);
 router.put("/:id", pacienteController.updatePatient);
 router.patch(
   "/:id/state",

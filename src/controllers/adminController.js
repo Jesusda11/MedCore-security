@@ -6,6 +6,8 @@ const bcrypt = require("bcrypt");
 const { PrismaClient } = require("../generated/prisma");
 const prisma = new PrismaClient();
 
+const patientService = require("../services/patientService");
+
 /* ---------- Helpers ---------- */
 
 function detectDelimiter(line) {
@@ -59,7 +61,7 @@ function isValidDateIso(isoStr) {
 
 /* ---------- Main import function ---------- */
 
-async function importUsersFromCSV(filePath, creatorId) {
+async function importUsersFromCSV(filePath, creatorId, token) {
   try {
     // 1) Leer y limpiar archivo
     let raw = fs.readFileSync(filePath, "utf8");
@@ -92,12 +94,17 @@ async function importUsersFromCSV(filePath, creatorId) {
             mapHeaders: ({ header }) => header.trim().replace(/\uFEFF/g, ""),
             strict: false,
             trim: true,
-          })
+          }),
         )
         .on("data", (row) => {
           // Soporte para casos donde csv-parser no separó correctamente.
           const keys = Object.keys(row);
-          if (keys.length === 1 && keys[0].includes(delimiter) && row[keys[0]] && row[keys[0]].includes(delimiter)) {
+          if (
+            keys.length === 1 &&
+            keys[0].includes(delimiter) &&
+            row[keys[0]] &&
+            row[keys[0]].includes(delimiter)
+          ) {
             const headerKeys = keys[0].split(delimiter).map((h) => h.trim());
             const values = row[keys[0]].split(delimiter).map((v) => v.trim());
             const parsed = {};
@@ -132,23 +139,28 @@ async function importUsersFromCSV(filePath, creatorId) {
     });
 
     // Buscar en BD los emails y las identificaciones ya existentes
-    const [existingUsersByEmail, existingUsersByIdentificacion] = await Promise.all([
-      csvEmails.length
-        ? prisma.users.findMany({
-          where: { email: { in: csvEmails } },
-          select: { email: true },
-        })
-        : [],
-      csvIdentificaciones.length
-        ? prisma.users.findMany({
-          where: { identificacion: { in: csvIdentificaciones } },
-          select: { identificacion: true },
-        })
-        : [],
-    ]);
+    const [existingUsersByEmail, existingUsersByIdentificacion] =
+      await Promise.all([
+        csvEmails.length
+          ? prisma.users.findMany({
+              where: { email: { in: csvEmails } },
+              select: { email: true },
+            })
+          : [],
+        csvIdentificaciones.length
+          ? prisma.users.findMany({
+              where: { identificacion: { in: csvIdentificaciones } },
+              select: { identificacion: true },
+            })
+          : [],
+      ]);
 
-    const existingEmailsSet = new Set(existingUsersByEmail.map((u) => (u.email || "").toLowerCase()));
-    const existingIdentificacionesSet = new Set(existingUsersByIdentificacion.map((u) => (u.identificacion || "").trim()));
+    const existingEmailsSet = new Set(
+      existingUsersByEmail.map((u) => (u.email || "").toLowerCase()),
+    );
+    const existingIdentificacionesSet = new Set(
+      existingUsersByIdentificacion.map((u) => (u.identificacion || "").trim()),
+    );
 
     const departamentoCache = new Map();
     const especializacionCache = new Map();
@@ -156,13 +168,15 @@ async function importUsersFromCSV(filePath, creatorId) {
     // Para detectar duplicados dentro del CSV
     const seenEmails = new Set();
 
-
     for (let i = 0; i < normalizedRows.length; i++) {
       function calcularEdad(dateOfBirth) {
         const today = new Date();
         let age = today.getFullYear() - dateOfBirth.getFullYear();
         const monthDiff = today.getMonth() - dateOfBirth.getMonth();
-        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dateOfBirth.getDate())) {
+        if (
+          monthDiff < 0 ||
+          (monthDiff === 0 && today.getDate() < dateOfBirth.getDate())
+        ) {
           age--;
         }
         return age;
@@ -175,9 +189,11 @@ async function importUsersFromCSV(filePath, creatorId) {
       const emailRaw = row.email;
       const fullnameRaw = row.fullname || row.name || null;
       const roleRaw = row.role || null;
-      const pwdRaw = row.current_password || row["current-password"] || row.password || null;
+      const pwdRaw =
+        row.current_password || row["current-password"] || row.password || null;
       const statusRaw = row.status || "PENDING";
-      const specializationRaw = row.specialization || row.especializacion || null;
+      const specializationRaw =
+        row.specialization || row.especializacion || null;
       const departmentRaw = row.department || row.departamento || null;
       const license_number_raw = row.license_number || row.license || null;
       const phoneRaw = row.phone || null;
@@ -220,13 +236,17 @@ async function importUsersFromCSV(filePath, creatorId) {
       if (idRaw) {
         const idTrim = idRaw.trim();
         if (seenEmails.has(idTrim)) {
-          errors.push(`${lineInfo}: identificacion duplicada en CSV (${idTrim})`);
+          errors.push(
+            `${lineInfo}: identificacion duplicada en CSV (${idTrim})`,
+          );
           skipped++;
           continue;
         }
 
         if (existingIdentificacionesSet.has(idTrim)) {
-          errors.push(`${lineInfo}: identificacion ya existe en BD (${idTrim})`);
+          errors.push(
+            `${lineInfo}: identificacion ya existe en BD (${idTrim})`,
+          );
           skipped++;
           continue;
         }
@@ -237,7 +257,9 @@ async function importUsersFromCSV(filePath, creatorId) {
         }
 
         if (!/^[0-9]{5,15}$/.test(idRaw)) {
-          errors.push(`${lineInfo}: identificación inválida (${idTrim}) - debe tener entre 5 y 15 caracteres y contener solo números`);
+          errors.push(
+            `${lineInfo}: identificación inválida (${idTrim}) - debe tener entre 5 y 15 caracteres y contener solo números`,
+          );
           skipped++;
           continue;
         }
@@ -255,20 +277,26 @@ async function importUsersFromCSV(filePath, creatorId) {
       if (dobRaw) {
         const dobStr = dobRaw.toString().trim();
         if (!isValidDateIso(dobStr)) {
-          errors.push(`${lineInfo}: date_of_birth inválida o en formato incorrecto (esperado YYYY-MM-DD): ${dobStr}`);
+          errors.push(
+            `${lineInfo}: date_of_birth inválida o en formato incorrecto (esperado YYYY-MM-DD): ${dobStr}`,
+          );
           skipped++;
           continue;
         }
         parsedDob = new Date(dobStr);
         if (parsedDob > new Date()) {
-          errors.push(`${lineInfo}: date_of_birth no puede ser futura: ${dobStr}`);
+          errors.push(
+            `${lineInfo}: date_of_birth no puede ser futura: ${dobStr}`,
+          );
           skipped++;
           continue;
         }
 
         const age = calcularEdad(parsedDob);
         if (age < 0 || age > 100) {
-          errors.push(`${lineInfo}: edad fuera de rango (0–100 años) calculada = ${age}`);
+          errors.push(
+            `${lineInfo}: edad fuera de rango (0–100 años) calculada = ${age}`,
+          );
           skipped++;
           continue;
         }
@@ -281,9 +309,13 @@ async function importUsersFromCSV(filePath, creatorId) {
         if (departamentoCache.has(depName)) {
           departamentoId = departamentoCache.get(depName);
         } else {
-          let dep = await prisma.departamento.findUnique({ where: { nombre: depName } });
+          let dep = await prisma.departamento.findUnique({
+            where: { nombre: depName },
+          });
           if (!dep) {
-            dep = await prisma.departamento.create({ data: { nombre: depName } });
+            dep = await prisma.departamento.create({
+              data: { nombre: depName },
+            });
           }
           departamentoCache.set(depName, dep.id);
           departamentoId = dep.id;
@@ -304,7 +336,9 @@ async function importUsersFromCSV(filePath, creatorId) {
               where: { nombre: specName, departamentoId: departamentoId },
             });
           } else {
-            spec = await prisma.especializacion.findFirst({ where: { nombre: specName } });
+            spec = await prisma.especializacion.findFirst({
+              where: { nombre: specName },
+            });
           }
           if (!spec) {
             const createData = { nombre: specName };
@@ -319,7 +353,9 @@ async function importUsersFromCSV(filePath, creatorId) {
       // Validar estado permitido
       const allowedStatuses = ["PENDING", "ACTIVE", "INACTIVE"];
       if (!allowedStatuses.includes(statusRaw.toUpperCase())) {
-        errors.push(`${lineInfo}: estado inválido (${statusRaw}), permitido: ${allowedStatuses.join(", ")}`);
+        errors.push(
+          `${lineInfo}: estado inválido (${statusRaw}), permitido: ${allowedStatuses.join(", ")}`,
+        );
         skipped++;
         continue;
       }
@@ -328,7 +364,7 @@ async function importUsersFromCSV(filePath, creatorId) {
       try {
         const hashed = await bcrypt.hash(pwdRaw.toString(), 10);
 
-        await prisma.users.create({
+        const user = await prisma.users.create({
           data: {
             identificacion: idRaw ? idRaw.toString().trim() : null,
             email,
@@ -336,15 +372,21 @@ async function importUsersFromCSV(filePath, creatorId) {
             current_password: hashed,
             status: statusRaw ? statusRaw.toString().trim() : "PENDING",
             role,
-            license_number: license_number_raw ? license_number_raw.toString().trim() : null,
+            license_number: license_number_raw
+              ? license_number_raw.toString().trim()
+              : null,
             phone: phoneRaw ? phoneRaw.toString().trim() : null,
             date_of_birth: parsedDob,
             departamentoId: departamentoId,
             especializacionId: especializacionId,
             createdById: creatorId || null,
-            updatedById: creatorId || null
+            updatedById: creatorId || null,
           },
         });
+
+        if (role === "PACIENTE") {
+          await patientService.createPatient(user.id, token);
+        }
 
         // marcar email como visto para evitar duplicados posteriores en el CSV
         seenEmails.add(email);
@@ -368,7 +410,11 @@ async function importUsersFromCSV(filePath, creatorId) {
     try {
       if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
     } catch (e) {
-      console.warn("No se pudo eliminar archivo temporal:", filePath, e.message);
+      console.warn(
+        "No se pudo eliminar archivo temporal:",
+        filePath,
+        e.message,
+      );
     }
 
     return { inserted, skipped, errors };
