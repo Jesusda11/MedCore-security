@@ -301,29 +301,42 @@ const usersByRoleAndStatus = async (role, status = null, page = 1, limit = 20) =
 
   const skip = (page - 1) * limit;
 
+  const baseSelect = {
+    id: true,
+    fullname: true,
+    email: true,
+    identificacion: true,
+    role: true,
+    status: true,
+    phone: true,
+    license_number: true,
+    date_of_birth: true,
+    createdAt: true,
+    updatedAt: true,
+    createdBy: { select: { fullname: true, email: true } },
+    updatedBy: { select: { fullname: true, email: true } },
+  };
+
+  if (normalizedRole === "MEDICO") {
+    baseSelect.especializacion = {
+      select: {
+        nombre: true,
+        departamento: { select: { nombre: true } },
+      },
+    };
+  }
+
+  if (["ENFERMERA", "ADMINISTRADOR"].includes(normalizedRole)) {
+    baseSelect.departamento = { select: { nombre: true } };
+  }
+
   const [total, users] = await Promise.all([
     prisma.users.count({ where }),
     prisma.users.findMany({
       where,
       skip,
       take: limit,
-      select: {
-        id: true,
-        fullname: true,
-        email: true,
-        identificacion: true,
-        role: true,
-        status: true,
-        phone: true,
-        license_number: true,
-        date_of_birth: true,
-        createdAt: true,
-        updatedAt: true,
-        especializacionId: true,
-        departamentoId: true,
-        createdBy: { select: { fullname: true, email: true } },
-        updatedBy: { select: { fullname: true, email: true } },
-      },
+      select: baseSelect,
       orderBy: { createdAt: "desc" },
     }),
   ]);
@@ -353,6 +366,63 @@ const searchUsers = async (query) => {
   });
 };
 
+const searchUsersByRole = async (query, role) => {
+  const normalizedRole = role?.toUpperCase();
+
+  const validRoles = ["MEDICO", "ENFERMERA", "ADMINISTRADOR", "PACIENTE"];
+  if (!validRoles.includes(normalizedRole)) {
+    throw new Error(`Rol no válido. Debe ser uno de: ${validRoles.join(", ")}`);
+  }
+
+  const where = {
+    AND: [
+      {
+        OR: [
+          { fullname: { contains: query, mode: "insensitive" } },
+          { identificacion: { contains: query } },
+        ],
+      },
+      { role: normalizedRole },
+    ],
+  };
+
+  const baseSelect = {
+    id: true,
+    fullname: true,
+    email: true,
+    identificacion: true,
+    role: true,
+    status: true,
+    phone: true,
+    license_number: true,
+    date_of_birth: true,
+    createdAt: true,
+    updatedAt: true,
+    createdBy: { select: { fullname: true, email: true } },
+    updatedBy: { select: { fullname: true, email: true } },
+  };
+
+  if (normalizedRole === "MEDICO") {
+    baseSelect.especializacion = {
+      select: {
+        nombre: true,
+        departamento: { select: { nombre: true } },
+      },
+    };
+  }
+
+  if (["ENFERMERA", "ADMINISTRADOR"].includes(normalizedRole)) {
+    baseSelect.departamento = { select: { nombre: true } };
+  }
+
+  const users = await prisma.users.findMany({
+    where,
+    select: baseSelect,
+    orderBy: { fullname: "asc" },
+  });
+
+  return users;
+};
 
 module.exports = {
   createUserBase,
@@ -362,7 +432,8 @@ module.exports = {
   userById,
   usersByRoleAndStatus,
   usersByRole,
-  searchUsers
+  searchUsers,
+  searchUsersByRole,
 };
 
 

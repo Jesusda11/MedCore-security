@@ -109,6 +109,7 @@ const getDoctorsBySpecialty = async (req, res) => {
       select: {
         id: true,
         fullname: true,
+        identificacion: true,
         email: true,
         role: true,
         status: true,
