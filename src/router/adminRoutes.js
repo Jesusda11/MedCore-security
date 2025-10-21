@@ -49,7 +49,11 @@ router.post(
       }
 
       const creatorId = req.user?.id || null;
-      const result = await importUsersFromCSV(req.file.path, creatorId);
+      const result = await importUsersFromCSV(
+        req.file.path,
+        creatorId,
+        req.token,
+      );
 
       return res.json({
         message: `Proceso de importación finalizado`,
