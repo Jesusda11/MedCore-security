@@ -59,9 +59,7 @@ async function createUserBase(data, creatorId = null) {
 
 const getBaseUserById = async (id) => {
   return prisma.users.findUnique({
-    where: { id,
-      status: 'ACTIVE'
-     },
+    where: { id },
     select: {
       id: true,
       fullname: true,
@@ -72,10 +70,6 @@ const getBaseUserById = async (id) => {
       phone: true,
       license_number: true,
       date_of_birth: true,
-      createdAt: true,
-      updatedAt: true,
-      createdBy: { select: { fullname: true, email: true } },
-      updatedBy: { select: { fullname: true, email: true } },
     },
   });
 };
@@ -104,20 +98,25 @@ const updateUserBase = async (id, data, updaterId = null) => {
   // Validar solo si se están actualizando los campos críticos
   const fieldsToValidate = {};
   if (email !== undefined) fieldsToValidate.email = email;
-  if (current_password !== undefined) fieldsToValidate.current_password = current_password;
-  if (identificacion !== undefined) fieldsToValidate.identificacion = identificacion;
-  if (date_of_birth !== undefined) fieldsToValidate.date_of_birth = date_of_birth;
+  if (current_password !== undefined)
+    fieldsToValidate.current_password = current_password;
+  if (identificacion !== undefined)
+    fieldsToValidate.identificacion = identificacion;
+  if (date_of_birth !== undefined)
+    fieldsToValidate.date_of_birth = date_of_birth;
 
   // Solo validar si hay campos críticos para actualizar
   const hasCriticalFields = Object.keys(fieldsToValidate).length > 0;
-  
+
   if (hasCriticalFields) {
     // Completar con datos existentes para validación
     const dataToValidate = {
       email: fieldsToValidate.email || existingUser.email,
       current_password: fieldsToValidate.current_password || "Valid123", // Placeholder si no se actualiza
-      identificacion: fieldsToValidate.identificacion || existingUser.identificacion,
-      date_of_birth: fieldsToValidate.date_of_birth || existingUser.date_of_birth,
+      identificacion:
+        fieldsToValidate.identificacion || existingUser.identificacion,
+      date_of_birth:
+        fieldsToValidate.date_of_birth || existingUser.date_of_birth,
     };
 
     const validationError = validateUserData(dataToValidate);
@@ -144,7 +143,7 @@ const updateUserBase = async (id, data, updaterId = null) => {
 
   // Construir objeto de actualización solo con campos definidos
   const updateData = {};
-  
+
   if (email !== undefined) updateData.email = email.toLowerCase().trim();
   if (current_password !== undefined) {
     updateData.current_password = await bcrypt.hash(current_password, 10);
@@ -152,7 +151,8 @@ const updateUserBase = async (id, data, updaterId = null) => {
   if (fullname !== undefined) updateData.fullname = fullname;
   if (identificacion !== undefined) updateData.identificacion = identificacion;
   if (phone !== undefined) updateData.phone = phone;
-  if (date_of_birth !== undefined) updateData.date_of_birth = new Date(date_of_birth);
+  if (date_of_birth !== undefined)
+    updateData.date_of_birth = new Date(date_of_birth);
   if (license_number !== undefined) updateData.license_number = license_number;
   if (status !== undefined) updateData.status = status;
   if (updaterId) updateData.updatedById = updaterId;
@@ -182,7 +182,6 @@ const updateUserBase = async (id, data, updaterId = null) => {
 };
 
 const toggleUserStatus = async (id, updaterId = null) => {
- 
   const existingUser = await prisma.users.findUnique({
     where: { id },
     select: { id: true, status: true, role: true },
@@ -196,7 +195,7 @@ const toggleUserStatus = async (id, updaterId = null) => {
 
   const updatedUser = await prisma.users.update({
     where: { id },
-    data: { 
+    data: {
       status: newStatus,
       updatedById: updaterId,
     },
@@ -220,31 +219,6 @@ const toggleUserStatus = async (id, updaterId = null) => {
   return updatedUser;
 };
 
-// Obtener usuario por ID
-async function userById(userId) {
-  try {
-    return await prisma.users.findFirst({
-      where: { id: userId },
-      select: {
-        id: true,
-        fullname: true,
-        email: true,
-        identificacion: true,
-        phone: true,
-        date_of_birth: true,
-        status: true,
-        createdAt: true,
-        updatedAt: true,
-        role: true,
-        createdBy: { select: { id: true, fullname: true, email: true } },
-        updatedBy: { select: { id: true, fullname: true, email: true } },
-      },
-    });
-  } catch (error) {
-    throw new Error("Error fetching user by ID: " + error.message);
-  }
-}
-
 const usersByRole = async (role, page = 1, limit = 20) => {
   const validRoles = ["ADMINISTRADOR", "MEDICO", "ENFERMERA", "PACIENTE"];
   const normalizedRole = role.toUpperCase();
@@ -257,7 +231,7 @@ const usersByRole = async (role, page = 1, limit = 20) => {
 
   const [users, total] = await Promise.all([
     prisma.users.findMany({
-      where: { role: normalizedRole},
+      where: { role: normalizedRole },
       skip,
       take: limit,
       orderBy: { createdAt: "desc" },
@@ -274,7 +248,7 @@ const usersByRole = async (role, page = 1, limit = 20) => {
       },
     }),
     prisma.users.count({
-      where: { role: normalizedRole},
+      where: { role: normalizedRole },
     }),
   ]);
 
@@ -285,7 +259,12 @@ const usersByRole = async (role, page = 1, limit = 20) => {
   };
 };
 
-const usersByRoleAndStatus = async (role, status = null, page = 1, limit = 20) => {
+const usersByRoleAndStatus = async (
+  role,
+  status = null,
+  page = 1,
+  limit = 20,
+) => {
   const normalizedRole = role.toUpperCase();
   const where = { role: normalizedRole };
 
@@ -429,13 +408,8 @@ module.exports = {
   getBaseUserById,
   updateUserBase,
   toggleUserStatus,
-  userById,
   usersByRoleAndStatus,
   usersByRole,
   searchUsers,
   searchUsersByRole,
 };
-
-
-
-

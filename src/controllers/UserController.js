@@ -1,5 +1,11 @@
 const { PrismaClient } = require("../generated/prisma");
-const { userById, usersByRole, usersByRoleAndStatus, searchUsers, searchUsersByRole} = require("../services/userService");
+const {
+  usersByRole,
+  usersByRoleAndStatus,
+  searchUsers,
+  getBaseUserById,
+  searchUsersByRole,
+} = require("../services/userService");
 const { updateUserBase } = require("../services/userService");
 const { updateDoctor } = require("./doctorController");
 const { updateNurse } = require("./nurseController");
@@ -10,8 +16,8 @@ const getUsersByRole = async (req, res) => {
     const { role, page = 1 } = req.query;
 
     if (!role) {
-      return res.status(400).json({ 
-        message: "Debe especificar el parámetro 'role'" 
+      return res.status(400).json({
+        message: "Debe especificar el parámetro 'role'",
       });
     }
 
@@ -25,8 +31,8 @@ const getUsersByRole = async (req, res) => {
     });
   } catch (error) {
     console.error("Error en getUsersByRole:", error);
-    return res.status(400).json({ 
-      message: error.message || "Error interno del servidor" 
+    return res.status(400).json({
+      message: error.message || "Error interno del servidor",
     });
   }
 };
@@ -35,8 +41,9 @@ const getUsersByRole = async (req, res) => {
  */
 const getUserById = async (req, res) => {
   try {
-    const { userId } = req.params;
-    const user = await userById(userId);
+    const { id } = req.params;
+
+    const user = await getBaseUserById(id);
 
     if (!user) {
       return res.status(404).json({ message: "Usuario no encontrado" });
@@ -61,7 +68,7 @@ const getUsersByRoleAndStatus = async (req, res) => {
       role,
       status,
       parseInt(page),
-      parseInt(limit)
+      parseInt(limit),
     );
 
     if (!result.users.length) {
@@ -112,11 +119,10 @@ const getUsersBySearch = async (req, res) => {
   }
 };
 
-
 const updateUserByRole = async (req, res) => {
   try {
-    const { id } = req.params; 
-    const currentUserId = req.user?.id; 
+    const { id } = req.params;
+    const currentUserId = req.user?.id;
 
     const user = await prisma.users.findUnique({
       where: { id },
