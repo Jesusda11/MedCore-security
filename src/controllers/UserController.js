@@ -4,6 +4,7 @@ const {
   usersByRoleAndStatus,
   searchUsers,
   getBaseUserById,
+  searchUsersByRole,
 } = require("../services/userService");
 const { updateUserBase } = require("../services/userService");
 const { updateDoctor } = require("./doctorController");
@@ -151,10 +152,39 @@ const updateUserByRole = async (req, res) => {
   }
 };
 
-module.exports = {
-  getUsersByRole,
-  getUserById,
-  getUsersByRoleAndStatus,
-  getUsersBySearch,
-  updateUserByRole,
+const getUsersBySearchAndRole = async (req, res) => {
+  try {
+    const { query, role } = req.query;
+
+    if (!query) {
+      return res.status(400).json({
+        message: "Debe especificar el parámetro 'query'",
+      });
+    }
+
+    const users = await searchUsersByRole(query, role);
+
+    if (!users.length) {
+      return res.status(404).json({ message: "No se encontraron usuarios" });
+    }
+
+    return res.status(200).json({
+      total: users.length,
+      users,
+    });
+  } catch (error) {
+    console.error("Error en getUsersBySearch:", error);
+    return res.status(500).json({
+      message: "Error interno del servidor",
+    });
+  }
 };
+
+
+module.exports = {
+getUsersByRole, 
+getUserById, 
+getUsersByRoleAndStatus,
+getUsersBySearch, 
+updateUserByRole,
+getUsersBySearchAndRole};

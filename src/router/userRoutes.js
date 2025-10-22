@@ -10,6 +10,7 @@ const {
   getUsersByRoleAndStatus,
   getUsersBySearch,
   updateUserByRole,
+  getUsersBySearchAndRole
 } = require("../controllers/UserController");
 const authMiddleware = require("../middleware/authMiddleware");
 const { auditInterceptor } = require("../interceptors/auditInterceptor");
@@ -25,5 +26,6 @@ router.get("/search", getUsersBySearch);
 router.get("/by-role", authMiddleware, getUsersByRole);
 router.get("/by-role-status", getUsersByRoleAndStatus);
 router.put("/:id", authMiddleware, updateUserByRole);
+router.get("/search-by-role", getUsersBySearchAndRole);
 
 module.exports = router;
