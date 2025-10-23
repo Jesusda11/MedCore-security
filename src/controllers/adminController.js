@@ -12,7 +12,8 @@ const uploadUsersCSV = async (req, res) => {
     const result = await importUsersFromCSV(req.file.path, creatorId, token);
 
     return res.json({
-      message: "Proceso de importación finalizado",
+      message: "Importación completada",
+      usuariosImportados: result.createdUsers,
       inserted: result.inserted,
       skipped: result.skipped,
       errors: result.errors,
