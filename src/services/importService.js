@@ -63,10 +63,25 @@ function isValidDateIso(isoStr) {
 
 /* ---------- Main import function ---------- */
 
-async function importUsersFromCSV(filePath, creatorId, token) {
+async function importUsersFromCSV(
+  filePath,
+  storedKey,
+  buffer,
+  creatorId,
+  token,
+) {
   try {
     // 1) Leer y limpiar archivo
-    let raw = fs.readFileSync(filePath, "utf8");
+    let raw;
+
+    if (buffer) {
+      raw = buffer.toString("utf8");
+    } else if (filePath && fs.existsSync(filePath)) {
+      raw = fs.readFileSync(filePath, "utf8");
+    } else {
+      throw new Error("No se proporcionó buffer ni ruta de archivo válida");
+    }
+
     raw = raw.replace(/^\uFEFF/, "");
     const lines = raw.split(/\r?\n/).filter((l) => l.trim().length > 0);
     if (lines.length === 0) {
@@ -126,7 +141,7 @@ async function importUsersFromCSV(filePath, creatorId, token) {
     const errors = [];
     let inserted = 0;
     let skipped = 0;
-    const createdUsers = []; 
+    const createdUsers = [];
 
     // Normalizar filas
     const normalizedRows = rows.map(normalizeRowKeysAndValues);
@@ -146,15 +161,15 @@ async function importUsersFromCSV(filePath, creatorId, token) {
       await Promise.all([
         csvEmails.length
           ? prisma.users.findMany({
-            where: { email: { in: csvEmails } },
-            select: { email: true },
-          })
+              where: { email: { in: csvEmails } },
+              select: { email: true },
+            })
           : [],
         csvIdentificaciones.length
           ? prisma.users.findMany({
-            where: { identificacion: { in: csvIdentificaciones } },
-            select: { identificacion: true },
-          })
+              where: { identificacion: { in: csvIdentificaciones } },
+              select: { identificacion: true },
+            })
           : [],
       ]);
 
@@ -165,7 +180,6 @@ async function importUsersFromCSV(filePath, creatorId, token) {
       existingUsersByIdentificacion.map((u) => (u.identificacion || "").trim()),
     );
 
-    
     // Para detectar duplicados dentro del CSV
     const seenEmails = new Set();
 
@@ -213,18 +227,18 @@ async function importUsersFromCSV(filePath, creatorId, token) {
 
       const email = emailRaw.toLowerCase().trim();
 
-         // Validar duplicado dentro del CSV
+      // Validar duplicado dentro del CSV
       if (idRaw) {
         const idTrim = idRaw.trim();
         if (seenEmails.has(idTrim)) {
-            const logMsg = `${lineInfo}: identificacion duplicada en CSV (${idTrim})`;
-            logError(logMsg);
-            errors.push(logMsg);
-            skipped++;
-            continue;
+          const logMsg = `${lineInfo}: identificacion duplicada en CSV (${idTrim})`;
+          logError(logMsg);
+          errors.push(logMsg);
+          skipped++;
+          continue;
         }
 
-      if (existingIdentificacionesSet.has(idTrim)) {
+        if (existingIdentificacionesSet.has(idTrim)) {
           const logMsg = `${lineInfo}: identificacion ya existe en BD (${idTrim})`;
           logError(logMsg);
           errors.push(logMsg);
@@ -232,32 +246,32 @@ async function importUsersFromCSV(filePath, creatorId, token) {
           continue;
         }
 
-      // Duplicado dentro del mismo CSV?
-     if (seenEmails.has(email)) {
-        const logMsg = `${lineInfo}: email duplicado en CSV (${email})`;
-        logError(logMsg);        
-        errors.push(logMsg);      
-        skipped++;
-        continue;
+        // Duplicado dentro del mismo CSV?
+        if (seenEmails.has(email)) {
+          const logMsg = `${lineInfo}: email duplicado en CSV (${email})`;
+          logError(logMsg);
+          errors.push(logMsg);
+          skipped++;
+          continue;
         }
 
-      // Duplicado contra BD?
-      if (existingEmailsSet.has(email)) {
-        const logMsg = `${lineInfo}: email ya existe en BD (${email})`;
-        logError(logMsg);
-        errors.push(logMsg);
-        skipped++;
-        continue;
-      }
+        // Duplicado contra BD?
+        if (existingEmailsSet.has(email)) {
+          const logMsg = `${lineInfo}: email ya existe en BD (${email})`;
+          logError(logMsg);
+          errors.push(logMsg);
+          skipped++;
+          continue;
+        }
 
-      // Validar formato email y password
-      if (!isValidEmail(email)) {
-        const logMsg = `${lineInfo}: email inválido (${email})`;
-        logError(logMsg);
-        errors.push(logMsg);
-        skipped++;
-        continue;
-      }
+        // Validar formato email y password
+        if (!isValidEmail(email)) {
+          const logMsg = `${lineInfo}: email inválido (${email})`;
+          logError(logMsg);
+          errors.push(logMsg);
+          skipped++;
+          continue;
+        }
 
         if (!/^[0-9]{5,15}$/.test(idRaw)) {
           const logMsg = `${lineInfo}: identificación inválida (${idTrim}) - debe tener entre 5 y 15 caracteres y contener solo números`;
@@ -320,67 +334,67 @@ async function importUsersFromCSV(filePath, creatorId, token) {
         const hashed = await bcrypt.hash(pwdRaw.toString(), 10);
 
         const userData = {
-            identificacion: idRaw ? idRaw.toString().trim() : null,
-            email,
-            fullname: fullnameRaw.toString().trim(),
-            current_password: hashed,
-            status: statusRaw ? statusRaw.toString().trim() : "PENDING",
-            license_number: license_number_raw ? license_number_raw.toString().trim() : null,
-            phone: phoneRaw ? phoneRaw.toString().trim() : null,
-            date_of_birth: parsedDob,
+          identificacion: idRaw ? idRaw.toString().trim() : null,
+          email,
+          fullname: fullnameRaw.toString().trim(),
+          current_password: hashed,
+          status: statusRaw ? statusRaw.toString().trim() : "PENDING",
+          license_number: license_number_raw
+            ? license_number_raw.toString().trim()
+            : null,
+          phone: phoneRaw ? phoneRaw.toString().trim() : null,
+          date_of_birth: parsedDob,
         };
 
-         const normalizedRole = role?.toUpperCase();
+        const normalizedRole = role?.toUpperCase();
 
         if (normalizedRole === "MEDICO") {
-            await createDoctor({
+          await createDoctor({
             especializacion: specializationRaw,
             departamento: departmentRaw,
             userData,
             creatorId,
-            });
-            logInfo(`Médico creado correctamente: ${email}`);
-            createdUsers.push({
+          });
+          logInfo(`Médico creado correctamente: ${email}`);
+          createdUsers.push({
             identificacion: userData.identificacion,
             role: normalizedRole,
             status: userData.status,
             fullname: userData.fullname,
-            });
-
+          });
         } else if (["ENFERMERA", "ADMINISTRADOR"].includes(normalizedRole)) {
-            await createUserWithDepartment({
+          await createUserWithDepartment({
             departamento: departmentRaw,
             userData,
             creatorId,
             role: normalizedRole,
-            });
-            logInfo(`Usuario ${normalizedRole} creado correctamente: ${email}`);
-            createdUsers.push({
+          });
+          logInfo(`Usuario ${normalizedRole} creado correctamente: ${email}`);
+          createdUsers.push({
             identificacion: userData.identificacion,
             role: normalizedRole,
             status: userData.status,
             fullname: userData.fullname,
-            });
-
+          });
         } else if (normalizedRole === "PACIENTE") {
-            const user = await prisma.users.create({
+          const user = await prisma.users.create({
             data: {
-                ...userData,
-                role: normalizedRole,
-                createdById: creatorId || null,
-                updatedById: creatorId || null,
+              ...userData,
+              role: normalizedRole,
+              createdById: creatorId || null,
+              updatedById: creatorId || null,
             },
-        });
+          });
 
-        await patientService.createPatient(user.id, token);
-        logInfo(`Paciente creado correctamente: ${email}`);
-        createdUsers.push({
+          await patientService.createPatient(user.id, token);
+          logInfo(`Paciente creado correctamente: ${email}`);
+          createdUsers.push({
             identificacion: userData.identificacion,
             role: normalizedRole,
             status: userData.status,
             fullname: userData.fullname,
-            });
-    }
+          });
+        }
 
         // marcar email como visto para evitar duplicados posteriores en el CSV
         seenEmails.add(email);
@@ -399,18 +413,6 @@ async function importUsersFromCSV(filePath, creatorId, token) {
         skipped++;
       }
     }
-
-    //Remover archivo temporal si existe
-    try {
-      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-    } catch (e) {
-      console.warn(
-        "No se pudo eliminar archivo temporal:",
-        filePath,
-        e.message,
-      );
-    }
-   
 
     return { inserted, skipped, errors, createdUsers };
   } catch (error) {

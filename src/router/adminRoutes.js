@@ -8,12 +8,7 @@ const { auditInterceptor } = require("../interceptors/auditInterceptor");
 
 const router = express.Router();
 
-// Configuración de Multer
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, "uploads/"),
-  filename: (req, file, cb) =>
-    cb(null, Date.now() + path.extname(file.originalname)),
-});
+const storage = multer.memoryStorage();
 
 // Validar que solo sea CSV
 const fileFilter = (req, file, cb) => {

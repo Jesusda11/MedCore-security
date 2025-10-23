@@ -1,4 +1,5 @@
 const axios = require("axios");
+const { MS_SECURITY_CONFIG } = require("../config/environment");
 
 /**
  * Service to interact with the ms-patient-ehr microservice for patient management.
@@ -7,15 +8,15 @@ const patientService = {
   async createPatient(userId, token) {
     try {
       const res = await axios.post(
-        `${process.env.MS_PATIENT}/patients`,
+        `${MS_SECURITY_CONFIG.MS_PATIENT}/patients`,
         {
           userId,
         },
         {
           headers: {
             Authorization: `Bearer ${token}`,
-          }
-        }
+          },
+        },
       );
       return res.data;
     } catch (error) {

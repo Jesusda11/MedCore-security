@@ -4,10 +4,9 @@ const bodyParser = require("body-parser");
 const routes = require("./router/routes");
 const cors = require("cors");
 const { initialize, disconnect } = require("./interceptors/auditInterceptor");
+const { MS_SECURITY_CONFIG } = require("./config/environment");
 
-require("dotenv").config();
-
-const port = process.env.PORT || 3000;
+const port = MS_SECURITY_CONFIG.PORT;
 const app = express();
 
 app.use(

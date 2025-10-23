@@ -1,6 +1,7 @@
 const jwt = require("jsonwebtoken");
 const authMiddleware = require("../middleware/authMiddleware");
 const isAdminMiddleware = require("../middleware/adminMiddleware");
+const { MS_SECURITY_CONFIG } = require("../config/environment");
 
 jest.mock("jsonwebtoken");
 
@@ -71,7 +72,7 @@ describe("Session Management Middleware", () => {
 
       expect(jwt.verify).toHaveBeenCalledWith(
         "valid_token_123",
-        process.env.JWT_SECRET,
+        MS_SECURITY_CONFIG.JWT_SECRET,
       );
       expect(req.user).toEqual(mockPayload);
       expect(next).toHaveBeenCalled();

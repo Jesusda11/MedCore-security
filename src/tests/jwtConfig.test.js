@@ -1,3 +1,4 @@
+const { MS_SECURITY_CONFIG } = require("../config/environment");
 const {
   generateAccessToken,
   generateRefreshToken,
@@ -11,15 +12,15 @@ const jwt = require("jsonwebtoken");
  */
 describe("jwtConfig", () => {
   beforeAll(() => {
-    process.env.JWT_SECRET = "test_secret_access";
-    process.env.JWT_REFRESH_SECRET = "test_secret_refresh";
+    MS_SECURITY_CONFIG.JWT_SECRET = "test_secret_access";
+    MS_SECURITY_CONFIG.JWT_REFRESH_SECRET = "test_secret_refresh";
   });
 
   test("generateAccessToken incluye id y expiración corta", () => {
     const user = { id: 42, role: "GUEST" };
     const token = generateAccessToken(user);
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, MS_SECURITY_CONFIG.JWT_SECRET);
     expect(decoded.id).toBe(user.id);
     expect(decoded.exp).toBeGreaterThan(decoded.iat);
   });
@@ -27,7 +28,7 @@ describe("jwtConfig", () => {
   test("generateRefreshToken", () => {
     const user = { id: 7 };
     const token = generateRefreshToken(user);
-    const decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET);
+    const decoded = jwt.verify(token, MS_SECURITY_CONFIG.JWT_REFRESH_SECRET);
     expect(decoded.id).toBe(user.id);
   });
 });

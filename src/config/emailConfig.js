@@ -1,10 +1,11 @@
 const nodemailer = require("nodemailer");
+const { MS_SECURITY_CONFIG } = require("./environment");
 
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
+  service: "gmail",
   auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASSWORD
+    user: MS_SECURITY_CONFIG.SMTP_USER,
+    pass: MS_SECURITY_CONFIG.SMTP_PASSWORD,
   },
 });
 
@@ -15,9 +16,9 @@ const generateVerificationCode = () => {
 
 const sendVerificationEmail = async (email, fullname, verificationCode) => {
   const mailOptions = {
-    from: process.env.SMTP_USER,
+    from: MS_SECURITY_CONFIG.SMTP_USER,
     to: email,
-    subject: 'Verificación de Cuenta – Confirma tu email',
+    subject: "Verificación de Cuenta – Confirma tu email",
     html: `
       <div style="max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif;">
         <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center;">
@@ -42,15 +43,15 @@ const sendVerificationEmail = async (email, fullname, verificationCode) => {
           </p>
         </div>
       </div>
-    `
+    `,
   };
 
   try {
     const info = await transporter.sendMail(mailOptions);
-    console.log('Email enviado:', info.messageId);
+    console.log("Email enviado:", info.messageId);
     return { success: true, messageId: info.messageId };
   } catch (error) {
-    console.error('Error enviando email:', error);
+    console.error("Error enviando email:", error);
     return { success: false, error: error.message };
   }
 };
