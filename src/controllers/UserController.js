@@ -5,6 +5,7 @@ const {
   searchUsers,
   getBaseUserById,
   searchUsersByRole,
+  deleteUserByRole
 } = require("../services/userService");
 const { updateUserBase } = require("../services/userService");
 const { updateDoctor } = require("./doctorController");
@@ -180,6 +181,23 @@ const getUsersBySearchAndRole = async (req, res) => {
   }
 };
 
+const deleteUsersByRole = async (req, res) => {
+  try {
+    const { role } = req.params;
+    const result = await deleteUserByRole(role);
+
+    if (result.count === 0) {
+      return res.status(404).json({ message: `No se encontraron usuarios con el rol ${role}` });
+    }
+
+    res.json({
+      message: `Se eliminaron ${result.count} usuario(s) con el rol ${role}`,
+    });
+  } catch (error) {
+    console.error("Error eliminando usuarios por rol:", error);
+    res.status(500).json({ message: "Error al eliminar usuarios por rol" });
+  }
+};
 
 module.exports = {
 getUsersByRole, 
@@ -187,4 +205,5 @@ getUserById,
 getUsersByRoleAndStatus,
 getUsersBySearch, 
 updateUserByRole,
-getUsersBySearchAndRole};
+getUsersBySearchAndRole,
+deleteUsersByRole};

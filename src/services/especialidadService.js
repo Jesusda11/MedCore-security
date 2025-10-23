@@ -8,7 +8,7 @@ const listEspecialidades = async () => {
   try {
     const especialidades = await prisma.especializacion.findMany({
       include: {
-        departamento: { select: { id: true, nombre: true } },
+        departamento: { select: {nombre: true } },
       },
       orderBy: { nombre: "asc" },
     });

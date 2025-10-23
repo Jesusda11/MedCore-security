@@ -202,6 +202,10 @@ const signIn = async (req, res) => {
       return res.status(401).json({ message: "Credenciales inválidas" });
     }
 
+       if (user.status === "INACTIVE") {
+      return res.status(403).json({ message: "Tu cuenta está inactiva" });
+    }
+
     if (user.status === "PENDING") {
       const verificationCode = generateVerificationCode();
       const verificationExpires = new Date();

@@ -403,6 +403,14 @@ const searchUsersByRole = async (query, role) => {
   return users;
 };
 
+const deleteUserByRole = async (role) => {
+  const normalizedRole = role.toUpperCase();
+  return prisma.users.deleteMany({
+    where: { role: normalizedRole },
+  });
+};
+
+
 module.exports = {
   createUserBase,
   getBaseUserById,
@@ -412,4 +420,5 @@ module.exports = {
   usersByRole,
   searchUsers,
   searchUsersByRole,
+  deleteUserByRole
 };

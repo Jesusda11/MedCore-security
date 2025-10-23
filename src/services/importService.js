@@ -126,6 +126,7 @@ async function importUsersFromCSV(filePath, creatorId, token) {
     const errors = [];
     let inserted = 0;
     let skipped = 0;
+    const createdUsers = []; 
 
     // Normalizar filas
     const normalizedRows = rows.map(normalizeRowKeysAndValues);
@@ -212,6 +213,25 @@ async function importUsersFromCSV(filePath, creatorId, token) {
 
       const email = emailRaw.toLowerCase().trim();
 
+         // Validar duplicado dentro del CSV
+      if (idRaw) {
+        const idTrim = idRaw.trim();
+        if (seenEmails.has(idTrim)) {
+            const logMsg = `${lineInfo}: identificacion duplicada en CSV (${idTrim})`;
+            logError(logMsg);
+            errors.push(logMsg);
+            skipped++;
+            continue;
+        }
+
+      if (existingIdentificacionesSet.has(idTrim)) {
+          const logMsg = `${lineInfo}: identificacion ya existe en BD (${idTrim})`;
+          logError(logMsg);
+          errors.push(logMsg);
+          skipped++;
+          continue;
+        }
+
       // Duplicado dentro del mismo CSV?
      if (seenEmails.has(email)) {
         const logMsg = `${lineInfo}: email duplicado en CSV (${email})`;
@@ -238,25 +258,6 @@ async function importUsersFromCSV(filePath, creatorId, token) {
         skipped++;
         continue;
       }
-
-      // Validar duplicado dentro del CSV
-      if (idRaw) {
-        const idTrim = idRaw.trim();
-        if (seenEmails.has(idTrim)) {
-            const logMsg = `${lineInfo}: identificacion duplicada en CSV (${idTrim})`;
-            logError(logMsg);
-            errors.push(logMsg);
-            skipped++;
-            continue;
-        }
-
-        if (existingIdentificacionesSet.has(idTrim)) {
-          const logMsg = `${lineInfo}: identificacion ya existe en BD (${idTrim})`;
-          logError(logMsg);
-          errors.push(logMsg);
-          skipped++;
-          continue;
-        }
 
         if (!/^[0-9]{5,15}$/.test(idRaw)) {
           const logMsg = `${lineInfo}: identificación inválida (${idTrim}) - debe tener entre 5 y 15 caracteres y contener solo números`;
@@ -339,6 +340,12 @@ async function importUsersFromCSV(filePath, creatorId, token) {
             creatorId,
             });
             logInfo(`Médico creado correctamente: ${email}`);
+            createdUsers.push({
+            identificacion: userData.identificacion,
+            role: normalizedRole,
+            status: userData.status,
+            fullname: userData.fullname,
+            });
 
         } else if (["ENFERMERA", "ADMINISTRADOR"].includes(normalizedRole)) {
             await createUserWithDepartment({
@@ -348,6 +355,12 @@ async function importUsersFromCSV(filePath, creatorId, token) {
             role: normalizedRole,
             });
             logInfo(`Usuario ${normalizedRole} creado correctamente: ${email}`);
+            createdUsers.push({
+            identificacion: userData.identificacion,
+            role: normalizedRole,
+            status: userData.status,
+            fullname: userData.fullname,
+            });
 
         } else if (normalizedRole === "PACIENTE") {
             const user = await prisma.users.create({
@@ -361,6 +374,12 @@ async function importUsersFromCSV(filePath, creatorId, token) {
 
         await patientService.createPatient(user.id, token);
         logInfo(`Paciente creado correctamente: ${email}`);
+        createdUsers.push({
+            identificacion: userData.identificacion,
+            role: normalizedRole,
+            status: userData.status,
+            fullname: userData.fullname,
+            });
     }
 
         // marcar email como visto para evitar duplicados posteriores en el CSV
@@ -391,8 +410,9 @@ async function importUsersFromCSV(filePath, creatorId, token) {
         e.message,
       );
     }
+   
 
-    return { inserted, skipped, errors };
+    return { inserted, skipped, errors, createdUsers };
   } catch (error) {
     // Dejar que el caller lo capture si quiere
     throw error;
