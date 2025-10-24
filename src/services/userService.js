@@ -410,6 +410,28 @@ const deleteUserByRole = async (role) => {
   });
 };
 
+const deleteUserById = async (id) => {
+  try {
+
+    const user = await prisma.users.findUnique({ where: { id } });
+
+    if (!user) {
+      const err = new Error("Usuario no encontrado");
+      err.status = 404;
+      throw err;
+    }
+
+    await prisma.users.delete({
+      where: { id },
+    });
+
+    return { message: "Usuario eliminado correctamente" };
+  } catch (error) {
+    console.error("Error al eliminar usuario (service):", error);
+    throw error;
+  }
+};
+
 
 module.exports = {
   createUserBase,
@@ -420,5 +442,6 @@ module.exports = {
   usersByRole,
   searchUsers,
   searchUsersByRole,
-  deleteUserByRole
+  deleteUserByRole,
+  deleteUserById
 };
