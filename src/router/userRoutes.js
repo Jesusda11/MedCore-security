@@ -11,7 +11,8 @@ const {
   getUsersBySearch,
   updateUserByRole,
   getUsersBySearchAndRole,
-  deleteUsersByRole
+  deleteUsersByRole,
+  removeUser
 } = require("../controllers/UserController");
 const authMiddleware = require("../middleware/authMiddleware");
 const { auditInterceptor } = require("../interceptors/auditInterceptor");
@@ -28,6 +29,7 @@ router.get("/by-role", authMiddleware, getUsersByRole);
 router.get("/search", getUsersBySearch);
 router.get("/search-by-role", getUsersBySearchAndRole);
 router.delete("/by-role/:role", deleteUsersByRole);
+router.delete("/:id", removeUser);
 
 router.get("/:id", getUserById);
 router.put("/:id", authMiddleware, updateUserByRole);

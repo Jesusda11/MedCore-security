@@ -77,7 +77,36 @@ const listEspecialidadesByDepartamento = async ({
   }
 };
 
+const deleteEspecialidad = async (id) => {
+  try {
+    const especialidad = await prisma.especializacion.findUnique({
+      where: { id },
+    });
+
+    if (!especialidad) {
+      const err = new Error("Especialidad no encontrada");
+      err.status = 404;
+      throw err;
+    }
+
+    await prisma.users.updateMany({
+      where: { especializacionId: id },
+      data: { especializacionId: null },
+    });
+
+    await prisma.especializacion.delete({
+      where: { id },
+    });
+
+    return { message: "Especialidad eliminada correctamente" };
+  } catch (error) {
+    console.error("Error al eliminar especialidad (service):", error);
+    throw error;
+  }
+};
+
 module.exports = {
   listEspecialidades,
   listEspecialidadesByDepartamento,
+  deleteEspecialidad
 };
