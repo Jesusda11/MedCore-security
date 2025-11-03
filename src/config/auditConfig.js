@@ -90,7 +90,7 @@ class AuditConfig {
         source: eventData.source || "ms-security",
         timestamp: new Date(),
         userId: eventData.userId || "anonymous",
-        userRole: eventData.userRole || "unknown",
+        userRole: eventData.userRole || "UNKNOWN",
         sessionId: eventData.sessionId,
         severityLevel: eventData.severityLevel,
         data: eventData.data,

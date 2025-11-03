@@ -92,7 +92,7 @@ const createPatient = async (req, res) => {
         ...req.body,
         role: "PACIENTE",
       },
-      rq.user?.id,
+      req.user?.id,
     );
 
     return res.status(201).json({
@@ -141,6 +141,7 @@ const updatePatientState = async (req, res) => {
       patient: updatedPatient,
     });
   } catch (error) {
+    console.error(error);
     return res.status(500).json({ message: "Error interno del servidor" });
   }
 };
