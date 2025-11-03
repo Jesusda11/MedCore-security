@@ -5,7 +5,8 @@ const {
   searchUsers,
   getBaseUserById,
   searchUsersByRole,
-  deleteUserByRole
+  deleteUserByRole,
+  deleteUserById
 } = require("../services/userService");
 const { updateUserBase } = require("../services/userService");
 const { updateDoctor } = require("./doctorController");
@@ -199,6 +200,20 @@ const deleteUsersByRole = async (req, res) => {
   }
 };
 
+const removeUser = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const result = await deleteUserById(id);
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error("Error al eliminar usuario (controller):", error);
+    return res.status(error.status || 500).json({
+      message: error.message || "Error al eliminar el usuario",
+    });
+  }
+};
+
 module.exports = {
 getUsersByRole, 
 getUserById, 
@@ -206,4 +221,5 @@ getUsersByRoleAndStatus,
 getUsersBySearch, 
 updateUserByRole,
 getUsersBySearchAndRole,
-deleteUsersByRole};
+deleteUsersByRole,
+removeUser};

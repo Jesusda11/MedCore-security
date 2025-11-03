@@ -1,4 +1,4 @@
-const { listEspecialidades, listEspecialidadesByDepartamento } = require("../services/especialidadService");
+const { listEspecialidades, listEspecialidadesByDepartamento, deleteEspecialidad } = require("../services/especialidadService");
 
 const getEspecialidades = async (req, res) => {
   try {
@@ -48,4 +48,18 @@ const listByDepartamento = async (req, res) => {
   }
 };
 
-module.exports = { getEspecialidades, listByDepartamento};
+const removeEspecialidad = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const result = await deleteEspecialidad(id);
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error("Error al eliminar especialidad (controller):", error);
+    return res.status(error.status || 500).json({
+      message: error.message || "Error al eliminar la especialidad",
+    });
+  }
+};
+
+module.exports = { getEspecialidades, listByDepartamento, removeEspecialidad };
