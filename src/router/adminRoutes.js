@@ -4,7 +4,6 @@ const path = require("path");
 const { uploadUsersCSV } = require("../controllers/adminController");
 const authMiddleware = require("../middleware/authMiddleware");
 const isAdminMiddleware = require("../middleware/adminMiddleware");
-const { auditInterceptor } = require("../interceptors/auditInterceptor");
 
 const router = express.Router();
 
@@ -32,10 +31,9 @@ const upload = multer({
 router.post(
   "/bulk-upload",
   authMiddleware,
-  auditInterceptor,
   isAdminMiddleware,
   upload.single("file"),
-  uploadUsersCSV 
+  uploadUsersCSV,
 );
 
 module.exports = router;

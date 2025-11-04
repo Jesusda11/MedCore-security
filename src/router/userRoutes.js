@@ -12,17 +12,14 @@ const {
   updateUserByRole,
   getUsersBySearchAndRole,
   deleteUsersByRole,
-  removeUser
+  removeUser,
 } = require("../controllers/UserController");
 const authMiddleware = require("../middleware/authMiddleware");
-const { auditInterceptor } = require("../interceptors/auditInterceptor");
 
 router.use(authMiddleware);
-router.use(auditInterceptor);
 router.use("/doctors", doctorRoutes);
 router.use("/nurses", nurseRoutes);
 router.use("/patients", pacientesRoutes);
-
 
 router.get("/by-role-status", getUsersByRoleAndStatus);
 router.get("/by-role", authMiddleware, getUsersByRole);
@@ -35,3 +32,4 @@ router.get("/:id", getUserById);
 router.put("/:id", authMiddleware, updateUserByRole);
 
 module.exports = router;
+

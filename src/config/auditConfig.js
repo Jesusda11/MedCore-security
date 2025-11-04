@@ -83,16 +83,26 @@ class AuditConfig {
       }
 
       const topic = AZURE_EVENT_HUB_CONFIG.TOPIC;
+      const eventId = generateUuidV4();
 
       const auditEvent = {
-        eventId: eventData.eventId || generateUuidV4(),
+        id: eventId,
         eventType: eventData.eventType,
-        source: eventData.source || "ms-security",
-        timestamp: new Date(),
-        userId: eventData.userId || "anonymous",
-        userRole: eventData.userRole || "UNKNOWN",
+        userId: eventData.userId,
+        userRole: eventData.userRole,
+        targetUserId: eventData.targetUserId,
+        resourceType: eventData.resourceType,
+        resourceId: eventData.resourceId,
+        action: eventData.action,
+        description: eventData.description,
+        ipAddress: eventData.ipAddress,
+        userAgent: eventData.userAgent,
         sessionId: eventData.sessionId,
+        success: eventData.success,
+        errorMessage: eventData.errorMessage,
         severityLevel: eventData.severityLevel,
+        accessReason: eventData.accessReason,
+        checksum: eventData.checksum,
         data: eventData.data,
         hipaaCompliance: eventData.hipaaCompliance,
         metadata: {
@@ -103,7 +113,7 @@ class AuditConfig {
       };
 
       const message = {
-        key: auditEvent.eventId,
+        key: eventId,
         value: JSON.stringify(auditEvent),
         timestamp: Date.now().toString(),
         headers: {

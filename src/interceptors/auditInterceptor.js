@@ -4,119 +4,219 @@ const {
   disconnect,
 } = require("../config/auditConfig");
 
+const { UserRole, EXCLUDED_ROUTES } = require("../constants/auditConstants");
+
+const {
+  determineEventType,
+  getEventConfig,
+  determineResourceType,
+  isHipaaSensitiveRoute,
+  extractResourceId,
+  buildAuditMetadata,
+} = require("../utils/auditMappers");
+
+/**
+ * AuditInterceptor class to handle audit logging for HTTP requests.
+ * Includes initialization, request interception, event capturing, and queue management.
+ */
 class AuditInterceptor {
-  constructor() {}
+  constructor() {
+    this.initialized = false;
+    this.eventQueue = [];
+    this.isProcessing = false;
+  }
 
   async initialize() {
-    await initialize();
+    try {
+      await initialize();
+      this.initialized = true;
+    } catch (error) {
+      throw error;
+    }
   }
 
   auditInterceptor(req, res, next) {
+    if (this.shouldSkipRoute(req.path)) return next();
+
     const startTime = Date.now();
+    const requestId = this.generateRequestId();
+    req.auditRequestId = requestId;
+
     const originalSend = res.send;
+    const originalJson = res.json;
+    let responseBody = null;
 
     res.send = function (body) {
-      res.locals.responseBody = body;
+      responseBody = body;
       return originalSend.call(this, body);
+    };
+
+    res.json = function (body) {
+      responseBody = body;
+      return originalJson.call(this, body);
     };
 
     next();
 
     res.on("finish", async () => {
-      await this.captureHttpEvent(req, res, startTime);
+      try {
+        await this.captureHttpEvent(req, res, startTime, responseBody);
+      } catch (error) {}
     });
   }
 
-  async captureHttpEvent(req, res, startTime) {
+  async captureHttpEvent(req, res, startTime, responseBody) {
+    if (!this.initialized) {
+      return;
+    }
+
     try {
-      const endTime = Date.now();
-      const duration = endTime - startTime;
+      const duration = Date.now() - startTime;
+      const { method, path = req.url } = req;
+      const statusCode = res.statusCode;
+      const success = statusCode >= 200 && statusCode < 400;
+      const eventType = determineEventType(method, path, statusCode);
+      const config = getEventConfig(eventType, method, path, success);
 
-      let severity = "LOW";
-      if (res.statusCode >= 500) severity = "CRITICAL";
-      else if (res.statusCode >= 400) severity = "HIGH";
-      else if (duration > 5000) severity = "MEDIUM";
-
-      const eventType = this.determineEventType(
-        req.method,
-        req.originalUrl,
-        res.statusCode,
-      );
-
-      const auditData = {
+      const auditEvent = {
+        accessReason:
+          req.headers["x-access-reason"] || req.body?.accessReason || null,
+        action: config.action,
+        checksum: null,
+        data: { durationMs: duration },
+        description: config.description,
+        errorMessage: success ? null : this.extractErrorMessage(responseBody),
         eventType,
+        hipaaCompliant: isHipaaSensitiveRoute(path),
+        ipAddress: this.extractIpAddress(req),
+        metadata: buildAuditMetadata(req, res, duration),
+        resourceId: extractResourceId(req),
+        resourceType: determineResourceType(path),
+        sessionId: req.auditRequestId || randomUUID(),
+        severityLevel: statusCode >= 500 ? "CRITICAL" : config.severity,
         source: "ms-security",
-        userId: req.user?.id,
-        userRole: req.user?.role,
-        sessionId: req.user?.sessionId,
-        severityLevel: severity,
-        data: {
-          method: req.method,
-          path: req.path,
-          statusCode: res.statusCode,
-          duration,
-          userAgent: req.get("User-Agent"),
-          ipAddress: req.ip || req.connection.remoteAddress,
-          queryParams: req.query,
-          bodySize: req.get("Content-Length") || 0,
-          responseSize: res.get("Content-Length") || 0,
-          ...req.auditData,
-        },
-        hipaaCompliance: this.extractHipaaData(req, res),
-        metadata: {
-          timestamp: new Date().toISOString(),
-          userRole: req.user?.role,
-          endpoint: `${req.method} ${req.originalUrl}`,
-        },
+        statusCode,
+        success,
+        targetUserId: this.extractTargetUserId(req),
+        userAgent: req.get("User-Agent") || null,
+        userId: req.user?.id || "ANONYMOUS",
+        userRole: this.normalizeUserRole(req.user?.role),
       };
 
-      await sendAuditEvent(auditData);
+      await this.sendEvent(auditEvent);
+    } catch (error) {}
+  }
+
+  async sendEvent(eventData) {
+    try {
+      await sendAuditEvent(eventData);
     } catch (error) {
-      console.error("Error capturing HTTP audit event:", error);
+      this.eventQueue.push({
+        event: eventData,
+        timestamp: new Date(),
+        retries: 0,
+      });
+
+      this.processEventQueue();
     }
   }
 
-  determineEventType(method, path, statusCode) {
-    method = method.toUpperCase();
-    path = path.toLowerCase();
+  async processEventQueue() {
+    if (this.isProcessing || this.eventQueue.length === 0) return;
 
-    if (path.includes("/sign-up")) return "USER_CREATED";
-    if (path.includes("/sign-in")) return "USER_LOGIN";
-    if (path.includes("/verify-email")) return "EMAIL_VERIFIED";
-    if (path.includes("/resend-verification-code"))
-      return "VERIFICATION_CODE_SENT";
-    if (path.includes("/bulk-upload")) return "BULK_USER_UPLOAD";
+    this.isProcessing = true;
 
-    if (statusCode >= 500) return "SYSTEM_ERROR";
-    if (statusCode === 401 || statusCode === 403) return "SECURITY_VIOLATION";
+    while (this.eventQueue.length > 0) {
+      const queuedItem = this.eventQueue[0];
 
-    return `HTTP_${method}_REQUEST`;
-  }
+      try {
+        await sendAuditEvent(queuedItem.event);
+        this.eventQueue.shift();
+      } catch (error) {
+        queuedItem.retries++;
 
-  extractHipaaData(req, res) {
-    const patientId =
-      req.params?.patientId || req.body?.patientId || req.query?.patientId;
-    const accessReason =
-      req.body?.accessReason || req.query?.accessReason || "SYSTEM_ACCESS";
-
-    if (patientId) {
-      return {
-        patientId,
-        accessReason,
-      };
+        if (queuedItem.retries >= 3) {
+          this.eventQueue.shift();
+        } else {
+          await new Promise((resolve) =>
+            setTimeout(resolve, 1000 * queuedItem.retries),
+          );
+        }
+        break;
+      }
     }
 
-    return undefined;
+    this.isProcessing = false;
+  }
+
+  generateRequestId() {
+    return `req_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+  }
+
+  shouldSkipRoute(path) {
+    const lowerPath = path.toLowerCase();
+    return EXCLUDED_ROUTES.some((route) => lowerPath.includes(route));
+  }
+
+  normalizeUserRole(role) {
+    return role
+      ? UserRole[role.toUpperCase()] || UserRole.UNKNOWN
+      : UserRole.UNKNOWN;
+  }
+
+  extractTargetUserId(req) {
+    if (req.params?.id && req.path.includes("/user")) return req.params.id;
+    if (req.body?.userId && req.body.userId !== req.user?.id)
+      return req.body.userId;
+    return null;
+  }
+
+  extractIpAddress(req) {
+    return (
+      req.ip ||
+      req.headers["x-forwarded-for"]?.split(",")[0] ||
+      req.headers["x-real-ip"] ||
+      req.connection?.remoteAddress ||
+      "unknown"
+    );
+  }
+
+  extractErrorMessage(responseBody) {
+    if (!responseBody) return null;
+
+    try {
+      const parsed =
+        typeof responseBody === "string"
+          ? JSON.parse(responseBody)
+          : responseBody;
+      return parsed.message || parsed.error || null;
+    } catch {
+      return null;
+    }
   }
 
   async disconnect() {
-    await disconnect();
+    try {
+      await this.processEventQueue();
+      await disconnect();
+      this.initialized = false;
+    } catch (error) {}
+  }
+
+  getQueueStatus() {
+    return {
+      queueLength: this.eventQueue.length,
+      isProcessing: this.isProcessing,
+      initialized: this.initialized,
+    };
   }
 }
 
 const auditInterceptor = new AuditInterceptor();
+
 module.exports = {
   initialize: auditInterceptor.initialize.bind(auditInterceptor),
   auditInterceptor: auditInterceptor.auditInterceptor.bind(auditInterceptor),
   disconnect: auditInterceptor.disconnect.bind(auditInterceptor),
+  getQueueStatus: auditInterceptor.getQueueStatus.bind(auditInterceptor),
 };
