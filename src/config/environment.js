@@ -10,7 +10,7 @@ const IS_VERCEL =
   process.env.VERCEL !== "0";
 
 const MS_SECURITY_CONFIG = {
-  DATABASE_URL: process.env.DATABASE_URL_POSTGRESQL || "",
+  DATABASE_URL: process.env.DATABASE_URL_MONGO || "",
   NODE_ENV: process.env.NODE_ENV || "development",
   VERCEL: IS_VERCEL,
   PORT: process.env.PORT || 3013,

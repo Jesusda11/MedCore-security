@@ -1,76 +1,76 @@
-  // This is your Prisma schema file,
-  // learn more about it in the docs: https://pris.ly/d/prisma-schema
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-  // Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-  // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
-  generator client {
-    provider = "prisma-client-js"
-    output   = "../src/generated/prisma"
-  }
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
 
-  datasource db {
-    provider = "mongodb"
-    url      = env("DATABASE_URL")
-  }
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL_MONGO")
+}
 
-  enum Role {
-    ADMINISTRADOR
-    MEDICO
-    ENFERMERA
-    PACIENTE
-  }
+enum Role {
+  ADMINISTRADOR
+  MEDICO
+  ENFERMERA
+  PACIENTE
+}
 
-  model Departamento {
-    id                String            @id @default(auto()) @map("_id") @db.ObjectId
-    nombre            String            @unique
-    especializaciones Especializacion[]
-    createdAt         DateTime          @default(now())
-    updatedAt         DateTime          @updatedAt
-    users             Users[]
-  }
+model Departamento {
+  id                String            @id @default(auto()) @map("_id") @db.ObjectId
+  nombre            String            @unique
+  especializaciones Especializacion[]
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  users             Users[]
+}
 
-  model Especializacion {
-    id             String       @id @default(auto()) @map("_id") @db.ObjectId
-    nombre         String
-    departamentoId String       @db.ObjectId
-    departamento   Departamento @relation(fields: [departamentoId], references: [id])
-    usuarios       Users[]
-    createdAt      DateTime     @default(now())
-    updatedAt      DateTime     @updatedAt
-  }
+model Especializacion {
+  id             String       @id @default(auto()) @map("_id") @db.ObjectId
+  nombre         String
+  departamentoId String       @db.ObjectId
+  departamento   Departamento @relation(fields: [departamentoId], references: [id])
+  usuarios       Users[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
 
-  model Users {
-    id                      String    @id @default(auto()) @map("_id") @db.ObjectId
-    email                   String    @unique
-    identificacion          String    @unique
-    fullname                String
-    current_password        String
-    status                  String    @default("PENDING")
-    verificationCode        String?
-    verificationCodeExpires DateTime?
-    role                    Role      @default(PACIENTE)
-    refreshToken            String?
-    createdAt               DateTime  @default(now())
-    updatedAt               DateTime  @updatedAt
+model Users {
+  id                      String    @id @default(auto()) @map("_id") @db.ObjectId
+  email                   String    @unique
+  identificacion          String    @unique
+  fullname                String
+  current_password        String
+  status                  String    @default("PENDING")
+  verificationCode        String?
+  verificationCodeExpires DateTime?
+  role                    Role      @default(PACIENTE)
+  refreshToken            String?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
 
-    // Relaciones
-    especializacionId String?          @db.ObjectId
-    especializacion   Especializacion? @relation(fields: [especializacionId], references: [id])
+  // Relaciones
+  especializacionId String?          @db.ObjectId
+  especializacion   Especializacion? @relation(fields: [especializacionId], references: [id])
 
-    departamentoId String?       @db.ObjectId
-    departamento   Departamento? @relation(fields: [departamentoId], references: [id])
+  departamentoId String?       @db.ObjectId
+  departamento   Departamento? @relation(fields: [departamentoId], references: [id])
 
-    // Auditoría
-    createdById  String? @db.ObjectId
-    updatedById  String? @db.ObjectId
-    createdBy    Users?  @relation("UserCreatedBy", fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
-    updatedBy    Users?  @relation("UserUpdatedBy", fields: [updatedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
-    createdUsers Users[] @relation("UserCreatedBy")
-    updatedUsers Users[] @relation("UserUpdatedBy")
+  // Auditoría
+  createdById  String? @db.ObjectId
+  updatedById  String? @db.ObjectId
+  createdBy    Users?  @relation("UserCreatedBy", fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  updatedBy    Users?  @relation("UserUpdatedBy", fields: [updatedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  createdUsers Users[] @relation("UserCreatedBy")
+  updatedUsers Users[] @relation("UserUpdatedBy")
 
-    // Datos médicos y personales
-    license_number String?
-    phone          String?
-    date_of_birth  DateTime?
-  }
+  // Datos médicos y personales
+  license_number String?
+  phone          String?
+  date_of_birth  DateTime?
+}
