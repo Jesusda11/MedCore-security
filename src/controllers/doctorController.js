@@ -1,5 +1,6 @@
 const { PrismaClient } = require("../generated/prisma");
 const prisma = new PrismaClient();
+const { publishDoctorStatusChange } = require("../events/kafkaProducer");
 const {
   createUserBase,
   getBaseUserById,
@@ -40,7 +41,7 @@ const registerDoctor = async (req, res) => {
         data: { nombre: especializacion, departamentoId: dept.id },
       });
     } else {
-      dept = esp.departamento; 
+      dept = esp.departamento;
     }
 
     const doctorBase = await createUserBase(
@@ -51,7 +52,7 @@ const registerDoctor = async (req, res) => {
       },
       req.user?.id
     );
-    
+
     return res.status(201).json({
       message: "Doctor registrado correctamente",
       doctor: {
@@ -258,6 +259,16 @@ const toggleDoctorStatus = async (req, res) => {
         },
       },
     });
+
+    const doctorEvent = {
+      id: updatedDoctor.id,
+      status: updatedDoctor.status,
+      specialty: doctorDetails?.especializacion?.nombre || 'General',
+    };
+
+    await publishDoctorStatusChange(doctorEvent);
+
+    console.log(`[Kafka/Azure] Evento publicado: doctor ${doctorEvent.id} -> ${doctorEvent.status}`);
 
     return res.status(200).json({
       message: `Doctor ${updatedDoctor.status === "ACTIVE" ? "activado" : "desactivado"} correctamente`,
