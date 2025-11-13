@@ -7,10 +7,7 @@ router.get("/", pacienteController.getAllPatients);
 router.get("/:id", pacienteController.getPatientById);
 router.post("/", pacienteController.createPatient);
 router.put("/:id", pacienteController.updatePatient);
-router.patch(
-  "/:id/state",
-  isAdminMiddleware,
-  pacienteController.updatePatientState,
+router.patch("/:id/state",isAdminMiddleware, pacienteController.updatePatientState,
 );
 
 module.exports = router;

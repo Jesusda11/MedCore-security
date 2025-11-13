@@ -16,7 +16,7 @@ const producer = kafka.producer();
 const publishDoctorStatusChange = async (doctor) => {
   await producer.connect();
   await producer.send({
-    topic: process.env.AZURE_EVENT_HUB_TOPIC,
+    topic: process.env.AZURE_EVENT_HUB_TOPIC_CLINICAL,
     messages: [
       {
         key: doctor.id,

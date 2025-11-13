@@ -15,47 +15,74 @@ const signUp = async (req, res) => {
     const { role } = req.body;
 
     if (!role) {
-      return res.status(400).json({ 
-        message: "Debe especificar un rol (PACIENTE, MEDICO, ENFERMERA)" 
+      return res.status(400).json({
+        message: "Debe especificar un rol (PACIENTE, MEDICO, ENFERMERA, ADMINISTRADOR)"
       });
     }
 
-    const validRoles = ["PACIENTE", "MEDICO", "ENFERMERA"];
+    const validRoles = ["PACIENTE", "MEDICO", "ENFERMERA", "ADMINISTRADOR"];
     if (!validRoles.includes(role)) {
       return res.status(400).json({ message: "Rol no válido" });
     }
-    switch (role) {
-      case "PACIENTE":
-        const patient = await createUserBase({
-          ...req.body,
-          role: "PACIENTE",
-        });
-        
-        return res.status(201).json({
-          message: "Paciente registrado correctamente. Verifique su cuenta al iniciar sesión.",
-          user: {
-            id: patient.id,
-            email: patient.email,
-            fullname: patient.fullname,
-            role: patient.role,
-            status: patient.status,
-          },
-        });
 
-      case "MEDICO":
-    
-        return await registerDoctor(req, res);
+    if (role === "ADMINISTRADOR") {
+      if (!req.user || !["ADMINISTRADOR"].includes(req.user.role)) {
+        return res.status(403).json({
+          message: "No tiene permisos para crear administradores"
+        });
+      }
 
-      case "ENFERMERA":
-        return await registerNurse(req, res);
+      const admin = await createUserBase({
+        ...req.body,
+        role: "ADMINISTRADOR",
+      });
+
+      return res.status(201).json({
+        message: "Administrador creado correctamente.",
+        user: {
+          id: admin.id,
+          email: admin.email,
+          fullname: admin.fullname,
+          role: admin.role,
+          status: admin.status,
+        },
+      });
     }
+
+    if (role === "PACIENTE") {
+      const patient = await createUserBase({
+        ...req.body,
+        role: "PACIENTE",
+      });
+
+      return res.status(201).json({
+        message: "Paciente registrado correctamente. Verifique su cuenta al iniciar sesión.",
+        user: {
+          id: patient.id,
+          email: patient.email,
+          fullname: patient.fullname,
+          role: patient.role,
+          status: patient.status,
+        },
+      });
+    }
+
+    if (role === "MEDICO") {
+      return await registerDoctor(req, res);
+    }
+
+    if (role === "ENFERMERA") {
+      return await registerNurse(req, res);
+    }
+    
   } catch (error) {
     console.error("Error en signUp:", error);
-    return res.status(400).json({ 
-      message: error.message || "Error interno del servidor" 
+    return res.status(400).json({
+      message: error.message || "Error interno del servidor"
     });
   }
 };
+
 
 const verifyEmail = async (req, res) => {
     try {
