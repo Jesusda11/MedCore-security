@@ -3,7 +3,7 @@ const { Kafka } = require("kafkajs");
 const kafka = new Kafka({
   clientId: process.env.AZURE_EVENT_HUB_CLIENT_ID,
   brokers: [process.env.AZURE_EVENT_HUB_BROKERS],
-  ssl: true, 
+  ssl: true,
   sasl: {
     mechanism: "plain",
     username: "$ConnectionString",
@@ -30,7 +30,9 @@ const publishDoctorStatusChange = async (doctor) => {
       },
     ],
   });
-  console.log(`[Kafka/Azure] Evento publicado: doctor ${doctor.id} -> ${doctor.status}`);
+  console.log(
+    `[Kafka/Azure] Evento publicado: doctor ${doctor.id} -> ${doctor.status}`,
+  );
 };
 
 module.exports = { publishDoctorStatusChange };

@@ -13,7 +13,9 @@ const registerDoctor = async (req, res) => {
     const { especializacion, departamento, ...userData } = req.body;
 
     if (!especializacion) {
-      return res.status(400).json({ message: "Debe especificar una especialización" });
+      return res
+        .status(400)
+        .json({ message: "Debe especificar una especialización" });
     }
 
     let esp = await prisma.especializacion.findFirst({
@@ -50,7 +52,7 @@ const registerDoctor = async (req, res) => {
         role: "MEDICO",
         especializacionId: esp.id,
       },
-      req.user?.id
+      req.user?.id,
     );
 
     return res.status(201).json({
@@ -74,7 +76,8 @@ const registerDoctor = async (req, res) => {
 const getDoctorsBySpecialty = async (req, res) => {
   try {
     const { specialty, page = 1 } = req.query;
-    if (!specialty) return res.status(400).json({ message: "Debe especificar 'specialty'" });
+    if (!specialty)
+      return res.status(400).json({ message: "Debe especificar 'specialty'" });
 
     const limit = 20;
     const skip = (parseInt(page, 10) - 1) * limit;
@@ -85,10 +88,12 @@ const getDoctorsBySpecialty = async (req, res) => {
     });
 
     if (!especializaciones || especializaciones.length === 0) {
-      return res.status(404).json({ message: `No se encontró la especialidad '${specialty}'` });
+      return res
+        .status(404)
+        .json({ message: `No se encontró la especialidad '${specialty}'` });
     }
 
-    const espIds = especializaciones.map(e => e.id);
+    const espIds = especializaciones.map((e) => e.id);
 
     const total = await prisma.users.count({
       where: {
@@ -116,7 +121,7 @@ const getDoctorsBySpecialty = async (req, res) => {
         status: true,
         createdAt: true,
         updatedAt: true,
-        especializacion: { select: { nombre: true } }
+        especializacion: { select: { nombre: true } },
       },
     });
 
@@ -144,6 +149,7 @@ const getDoctorById = async (req, res) => {
     const doctorDetails = await prisma.users.findUnique({
       where: { id },
       select: {
+        paused: true,
         especializacion: {
           select: {
             nombre: true,
@@ -155,8 +161,10 @@ const getDoctorById = async (req, res) => {
 
     return res.status(200).json({
       ...user,
+      paused: doctorDetails.paused,
       especializacion: doctorDetails?.especializacion?.nombre || null,
-      departamento: doctorDetails?.especializacion?.departamento?.nombre || null,
+      departamento:
+        doctorDetails?.especializacion?.departamento?.nombre || null,
     });
   } catch (error) {
     console.error("Error en getDoctorById:", error);
@@ -186,7 +194,8 @@ const updateDoctor = async (req, res) => {
       if (!esp) {
         if (!departamento) {
           return res.status(400).json({
-            message: "Debe especificar un departamento si la especialización no existe todavía.",
+            message:
+              "Debe especificar un departamento si la especialización no existe todavía.",
           });
         }
 
@@ -224,12 +233,45 @@ const updateDoctor = async (req, res) => {
       doctor: {
         ...updatedDoctor,
         especializacion: doctorDetails?.especializacion?.nombre || null,
-        departamento: doctorDetails?.especializacion?.departamento?.nombre || null,
+        departamento:
+          doctorDetails?.especializacion?.departamento?.nombre || null,
       },
     });
   } catch (error) {
     console.error("Error en updateDoctor:", error);
-    return res.status(500).json({ message: error.message || "Error interno del servidor" });
+    return res
+      .status(500)
+      .json({ message: error.message || "Error interno del servidor" });
+  }
+};
+
+const updatePausedStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { paused } = req.body;
+
+    const doctor = await prisma.users.findUnique({
+      where: { id },
+      select: { id: true, role: true, paused: true },
+    });
+    if (!doctor || doctor.role !== "MEDICO") {
+      return res.status(404).json({ message: "Doctor no encontrado" });
+    }
+
+    const updatedDoctor = await prisma.users.update({
+      where: { id },
+      data: { paused: Boolean(paused) },
+    });
+
+    return res.status(200).json({
+      message: `Estado de pausa del doctor actualizado a ${updatedDoctor.paused}`,
+      doctor: updatedDoctor,
+    });
+  } catch (error) {
+    console.error("Error en updatePausedStatus:", error);
+    return res
+      .status(500)
+      .json({ message: error.message || "Error interno del servidor" });
   }
 };
 
@@ -263,28 +305,37 @@ const toggleDoctorStatus = async (req, res) => {
     const doctorEvent = {
       id: updatedDoctor.id,
       status: updatedDoctor.status,
-      specialty: doctorDetails?.especializacion?.nombre || 'General',
+      specialty: doctorDetails?.especializacion?.nombre || "General",
     };
 
     await publishDoctorStatusChange(doctorEvent);
 
-    console.log(`[Kafka/Azure] Evento publicado: doctor ${doctorEvent.id} -> ${doctorEvent.status}`);
+    console.log(
+      `[Kafka/Azure] Evento publicado: doctor ${doctorEvent.id} -> ${doctorEvent.status}`,
+    );
 
     return res.status(200).json({
       message: `Doctor ${updatedDoctor.status === "ACTIVE" ? "activado" : "desactivado"} correctamente`,
       doctor: {
         ...updatedDoctor,
         especializacion: doctorDetails?.especializacion?.nombre || null,
-        departamento: doctorDetails?.especializacion?.departamento?.nombre || null,
+        departamento:
+          doctorDetails?.especializacion?.departamento?.nombre || null,
       },
     });
   } catch (error) {
     console.error("Error en toggleDoctorStatus:", error);
-    return res.status(500).json({ message: error.message || "Error interno del servidor" });
+    return res
+      .status(500)
+      .json({ message: error.message || "Error interno del servidor" });
   }
 };
 
-
-module.exports = { registerDoctor, getDoctorById, updateDoctor, toggleDoctorStatus, getDoctorsBySpecialty };
-
-
+module.exports = {
+  registerDoctor,
+  getDoctorById,
+  updateDoctor,
+  updatePausedStatus,
+  toggleDoctorStatus,
+  getDoctorsBySpecialty,
+};
